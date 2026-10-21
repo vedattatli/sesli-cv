@@ -1688,7 +1688,7 @@
       c.setAttribute('aria-label', 'CV sayfa ' + i + ' / ' + pdf.numPages);
       await page.render({ canvasContext: c.getContext('2d', { alpha: false }), viewport: vp }).promise;
       if (my !== pv.gen) return;
-      pages.push(h('div', { class: 'page' }, c, pdf.numPages > 1 ? h('span', { class: 'page-no', 'aria-hidden': 'true' }, i + ' / ' + pdf.numPages) : null));
+      pages.push(h('div', { class: 'page' }, c)); // çok sayfalı CV'de sayfa numarası PDF'in kendi altbilgisinde
     }
     target.replaceChildren(...pages);
   }
