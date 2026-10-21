@@ -1,0 +1,46 @@
+{
+ "name": "Ayşe Yılmaz",
+ "title": "Kıdemli Yazılım Geliştirici",
+ "phone": "0532 000 00 00",
+ "email": "ayse.yilmaz@example.com",
+ "city": "İzmir",
+ "web": "linkedin.com/in/ayse-yilmaz-ornek",
+ "summary": "Beş yıllık deneyime sahip bir yazılım mühendisiyim. Web ve mobil uygulamalar geliştiriyorum; ödeme sistemleri ve ekip liderliği konusunda deneyimliyim.",
+ "jobs": [
+  {
+   "role": "Kıdemli Yazılım Geliştirici",
+   "company": "Kuzey Yazılım A.Ş.",
+   "city": "İstanbul",
+   "start": "Mart 2021",
+   "end": "Devam ediyor",
+   "desc": "Mobil uygulama ekibini yönettim\nÖdeme sistemini yeniden yazdım\nTest süreçlerini otomatikleştirdim"
+  },
+  {
+   "role": "Yazılım Geliştirici",
+   "company": "Mavi Lojistik",
+   "city": "İzmir",
+   "start": "Haziran 2018",
+   "end": "Şubat 2021",
+   "desc": "Depo yönetim sistemine yeni modüller ekledim\nRaporlama ekranını hızlandırdım"
+  }
+ ],
+ "edu": [
+  {
+   "school": "Ege Üniversitesi",
+   "program": "Bilgisayar Mühendisliği",
+   "degree": "Lisans",
+   "start": "2014",
+   "end": "2018",
+   "note": "3,20 / 4"
+  }
+ ],
+ "skills": "JavaScript, React, Node.js, Takım çalışması, SQL",
+ "langs": "ingilizce ileri almanca başlangıç",
+ "certs": "AWS Certified Developer\nScrum Master Sertifikası",
+ "hobbies": "Yüzme, fotoğrafçılık",
+ "refs": "Mehmet Kaya — Kuzey Yazılım, Teknik Müdür — 0532 000 00 01",
+ "birth": "12 Mart 1995",
+ "military": "Yapıldı",
+ "license": "B sınıfı",
+ "marital": ""
+}
