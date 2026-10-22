@@ -162,21 +162,26 @@
   // lowercase + ASCII fold, for dictionary lookups ("İngilizce", "ingilizce", "INGILIZCE" → "ingilizce")
   function foldKey(s) { return foldAscii(trLower(str(s))); }
 
-  function sanitizeFilePart(s) {
-    return foldAscii(str(s))
+  function sanitizeFilePart(s, sep) {
+    var t = foldAscii(str(s))
       .normalize('NFD').replace(/[̀-ͯ]/g, '')   // José → Jose
-      .replace(/['’`]/g, '')                              // O'Neil → ONeil
+      .replace(/['’`]/g, '');                             // O'Neil → ONeil
+    if (sep === '-') return t.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return t
       .replace(/[^A-Za-z0-9-]+/g, '_')
       .replace(/_+/g, '_')
       .replace(/^[_-]+|[_-]+$/g, '');
   }
 
   // Parts are joined with "_"; an empty suffix gives "Ayse_Yilmaz.pdf"; empty ext gives no dot.
-  function fileName(name, suffix, ext) {
+  // opts.sep === '-' (optional, v2): every gap becomes one hyphen and parts are joined with "-":
+  // fileName('Ayşe Kaya', 'CV Kuzey Lojistik', 'pdf', { sep: '-' }) → "Ayse-Kaya-CV-Kuzey-Lojistik.pdf".
+  function fileName(name, suffix, ext, opts) {
     if (suffix == null) suffix = 'CV';
     if (ext == null) ext = 'pdf';
-    var parts = [sanitizeFilePart(name), sanitizeFilePart(suffix)].filter(Boolean);
-    var base = parts.join('_') || 'CV';
+    var sep = opts && opts.sep === '-' ? '-' : '_';
+    var parts = [sanitizeFilePart(name, sep), sanitizeFilePart(suffix, sep)].filter(Boolean);
+    var base = parts.join(sep) || 'CV';
     ext = str(ext).replace(/^\.+/, '').trim();
     return ext ? base + '.' + ext : base;
   }
@@ -564,7 +569,9 @@
   // suffix: "2019'da") or a present keyword. Anything with extra words ("Yaz 2019",
   // "2019'dan beri", "15.03.2019") is printed as the person wrote it, trimmed, so nothing they
   // typed silently disappears from the PDF.
-  function formatDate(s, lang) {
+  // opts.numeric (optional, v2; used by the Sade template): month + year as "03/2021" instead of
+  // "Mart 2021". A year alone stays "2021"; a month alone and the present keyword are unchanged.
+  function formatDate(s, lang, opts) {
     var raw = str(s).trim();
     if (!raw) return '';
     var en = isEn(lang);
@@ -572,13 +579,16 @@
     var names = en ? MONTHS_EN : MONTHS_TR;
     if (p.present) return en ? 'Present' : 'Günümüz';
     if (!p.clean) return raw;
-    if (p.month && p.year) return names[p.month - 1] + ' ' + p.year;
+    if (p.month && p.year) {
+      if (opts && opts.numeric) return (p.month < 10 ? '0' : '') + p.month + '/' + p.year;
+      return names[p.month - 1] + ' ' + p.year;
+    }
     if (p.year) return p.year;
     return names[p.month - 1];
   }
 
-  function formatRange(start, end, lang) {
-    var a = formatDate(start, lang), b = formatDate(end, lang);
+  function formatRange(start, end, lang, opts) {
+    var a = formatDate(start, lang, opts), b = formatDate(end, lang, opts);
     if (a && b) return a + ' – ' + b;
     return a || b || '';
   }
@@ -878,14 +888,44 @@
     return pieces.filter(Boolean);
   }
 
+  // Language exams (v2). Matched on keyString (lower case, ASCII-folded, same length as the input),
+  // so "YÖKDİL", "yokdil" and "Yökdil" all count. An exam is the name, then an optional score
+  // (number with a dot or comma decimal, or a CEFR level for Goethe/DELF/DALF/DELE) and an optional
+  // year, bare or in brackets: "IELTS 6.5 (2024)", "TOEFL iBT 105", "YDS 85 (2025)", "Goethe B1".
+  var EXAM_RE = new RegExp('(^|[^\\p{L}\\p{N}])(toefl(?:[\\s-]*ibt)?|ielts|e-?yds|yds|yokdil|toeic|' +
+    'pte(?:\\s+academic)?|goethe(?:-zertifikat)?|delf|dalf|testdaf|dele)(?![\\p{L}\\p{N}])' +
+    '(?:\\s*[:\\-–]?\\s*(\\d{1,3}(?:[.,]\\d{1,2})?|[abc][12])(?![\\p{L}\\p{N}]))?' +
+    '(?:\\s*\\(?\\s*((?:19|20)\\d{2})\\s*\\)?(?![\\p{L}\\p{N}]))?', 'u');
+  var EXAM_NAMES = {
+    'toefl ibt': 'TOEFL iBT', toefl: 'TOEFL', ielts: 'IELTS', 'e yds': 'e-YDS', eyds: 'e-YDS', yds: 'YDS',
+    yokdil: 'YÖKDİL', toeic: 'TOEIC', 'pte academic': 'PTE Academic', pte: 'PTE',
+    'goethe zertifikat': 'Goethe-Zertifikat', goethe: 'Goethe', delf: 'DELF', dalf: 'DALF', testdaf: 'TestDaF', dele: 'DELE'
+  };
+  var CEFR_RE = /(^|[^\p{L}\p{N}])([abc][12])(?![\p{L}\p{N}])/u;
+
+  // → { exam: "IELTS 6.5 (2024)", rest: the item without it } or null.
+  function findExam(item) {
+    var m = EXAM_RE.exec(keyString(item));
+    if (!m) return null;
+    var start = m.index + m[1].length, end = m.index + m[0].length;
+    var name = EXAM_NAMES[m[2].replace(/[\s-]+/g, ' ')] || m[2].toUpperCase();
+    var score = m[3] ? m[3].toUpperCase() : ''; // digits are unchanged by keyString; "b1" → "B1"
+    var text = name + (score ? ' ' + score : '') + (m[4] ? ' (' + m[4] + ')' : '');
+    return { exam: text, rest: oneLine(item.slice(0, start) + ' ' + item.slice(end)) };
+  }
+
   // An item that is only a level ("İngilizce, ileri") is attached to the previous language when
   // that one had no level yet; otherwise it is dropped. A language named twice is listed once
-  // (its level filled in from the repeat if the first mention had none).
+  // (its level filled in from the repeat if the first mention had none). An exam inside an item
+  // ("İngilizce YDS 85 (2025)") is not part of the name; an item that is only an exam is dropped
+  // here (parseLanguageDetails keeps it).
   function parseLanguages(s) {
     var out = [], byName = Object.create(null);
     splitList(s).forEach(function (item) {
       splitLanguageRun(item).forEach(function (it) {
-        var p = parseLanguageItem(it), k = foldKey(p.name);
+        var ex = findExam(it);
+        var p = parseLanguageItem(ex ? ex.rest : it), k = foldKey(p.name);
+        if (ex) p.raw = oneLine(it);
         var prev = !p.name ? out[out.length - 1] : has(byName, k) ? byName[k] : null;
         if (prev) {
           if (!prev.level && p.level) { prev.level = p.level; prev.raw += ', ' + p.raw; }
@@ -907,6 +947,81 @@
     var n = Math.round(Number(level));
     var labels = isEn(lang) ? LEVEL_LABELS.en : LEVEL_LABELS.tr;
     return n >= 1 && n <= 5 ? labels[n] : '';
+  }
+
+  // ---- language details (v2): { name, level, cefr, exam, raw }
+  // CEFR words (Jobseeker mapping, brief §3.2).
+  var CEFR_LABELS = {
+    tr: { A1: 'Başlangıç', A2: 'Temel', B1: 'Orta', B2: 'Orta-üst', C1: 'İleri', C2: 'Yetkin' },
+    en: { A1: 'Beginner', A2: 'Elementary', B1: 'Intermediate', B2: 'Upper-intermediate', C1: 'Advanced', C2: 'Proficient' }
+  };
+  function cefrLabel(cefr, lang) {
+    var k = str(cefr).trim().toUpperCase();
+    var t = isEn(lang) ? CEFR_LABELS.en : CEFR_LABELS.tr;
+    return has(t, k) ? t[k] : '';
+  }
+
+  // One language piece: the exam is cut out first (its score is not a level), then the first
+  // whole-word CEFR level is read, then parseLanguageItem finds the name and the 1–5 level.
+  function parseLanguageDetail(piece) {
+    var ex = findExam(piece);
+    var rest = ex ? ex.rest : piece;
+    var cm = CEFR_RE.exec(keyString(rest));
+    var p = parseLanguageItem(rest.replace(/[·•|]/g, ' '));
+    return { name: p.name, level: p.level, cefr: cm ? cm[2].toUpperCase() : '', exam: ex ? ex.exam : '', raw: oneLine(piece) };
+  }
+
+  /*
+   * parseLanguageDetails(s) → [{ name, level (0–5), cefr ('B2' or ''), exam ('IELTS 6.5 (2024)' or ''), raw }].
+   * Items are split on commas, semicolons, new lines, "|" and "•" — not on "·", which joins a level
+   * and an exam inside one item: "İngilizce ileri (C1) · IELTS 6.5 (2024), Almanca B1". A dictated
+   * run without commas is cut at each known language name, as in parseLanguages. An item without a
+   * language name (only a level, CEFR or exam: "İngilizce C1, IELTS 7.0") fills in what the previous
+   * language is missing; a language named twice is listed once.
+   */
+  function parseLanguageDetails(s) {
+    var out = [], byName = Object.create(null);
+    // a decimal comma in a score ("YÖKDİL 82,5") is not a list separator
+    str(s).replace(VE_SEPARATOR, '$1,').replace(/(\d),(\d{1,2})(?!\d)/g, '$1\u0000$2').split(/[,;\n\r•|]/).forEach(function (raw) {
+      var item = stripItemDot(stripBullet(oneLine(raw.replace(/\u0000/g, ','))));
+      if (!item) return;
+      splitLanguageRun(item).forEach(function (piece) {
+        piece = piece.replace(/^[\s·\-–—:]+|[\s·\-–—:]+$/g, '');
+        if (!piece) return;
+        var d = parseLanguageDetail(piece);
+        if (!isLetter((d.name.match(/\p{L}/u) || [''])[0])) d.name = ''; // "5", "(2024)": no language name
+        var k = foldKey(d.name);
+        var prev = !d.name ? out[out.length - 1] : has(byName, k) ? byName[k] : null;
+        if (prev) {
+          var used = false;
+          if (!prev.level && d.level) { prev.level = d.level; used = true; }
+          if (!prev.cefr && d.cefr) { prev.cefr = d.cefr; used = true; }
+          if (!prev.exam && d.exam) { prev.exam = d.exam; used = true; }
+          if (used) prev.raw += ', ' + d.raw;
+          return;
+        }
+        if (!d.name) return;
+        byName[k] = d;
+        out.push(d);
+      });
+    });
+    return out;
+  }
+
+  /*
+   * The text after the language name on a CV (no bars or dots, brief §4):
+   * native → "Ana dil"; a CEFR level → "B2 (Orta-üst)"; otherwise the 1–5 level word ("İleri");
+   * then the exam: "B2 (Orta-üst) · IELTS 6.5 (2024)". Nothing known → ''.
+   */
+  function languageDetailText(d, lang) {
+    if (!d || typeof d !== 'object') return '';
+    var parts = [], level = Math.round(Number(d.level)) || 0, cefr = str(d.cefr).trim().toUpperCase();
+    if (level === 5) parts.push(levelLabel(5, lang));
+    else if (cefrLabel(cefr, lang)) parts.push(cefr + ' (' + cefrLabel(cefr, lang) + ')');
+    else if (level >= 1 && level <= 4) parts.push(levelLabel(level, lang));
+    var exam = oneLine(d.exam);
+    if (exam) parts.push(exam);
+    return parts.join(' · ');
   }
 
   // The first Turkish name listed for an English name wins on the way back (Dutch → Felemenkçe).
@@ -981,7 +1096,10 @@
     splitList: splitList,
     splitLines: splitLines,
     parseLanguages: parseLanguages,
+    parseLanguageDetails: parseLanguageDetails,
     levelLabel: levelLabel,
+    cefrLabel: cefrLabel,
+    languageDetailText: languageDetailText,
     languageName: languageName,
     MONTHS_TR: MONTHS_TR.slice(),
     MONTHS_EN: MONTHS_EN.slice()

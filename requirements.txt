@@ -1,0 +1,2 @@
+# Runtime dependencies of the Vercel Python function api/cv.py (tests and dev_server use only the stdlib).
+anthropic>=2,<3

@@ -11,7 +11,7 @@
  */
 /* global load, print */
 globalThis.console = { log: print, error: print };
-load('parse.js');
+load('public/parse.js');
 
 var P = globalThis.CVParse;
 var passed = 0, failed = 0;

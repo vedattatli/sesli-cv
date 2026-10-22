@@ -1,2 +1,13 @@
 site/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+.vercel/
+public/dev.html
+public/fake-sr.js
+public/sample-cv.json
 .DS_Store
+public/fake-ai.js

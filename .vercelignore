@@ -1,0 +1,15 @@
+# Never upload local secrets, virtualenvs or build/test leftovers to Vercel.
+.env
+.env.*
+.venv
+venv
+__pycache__
+*.pyc
+site
+dist
+.DS_Store
+# Local-only dev harness copied into public/ by tests/make-dev.sh (gitignored; never deploy it).
+public/dev.html
+public/fake-sr.js
+public/fake-ai.js
+public/sample-cv.json

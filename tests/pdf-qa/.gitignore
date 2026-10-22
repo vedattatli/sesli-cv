@@ -1,0 +1,4 @@
+# tests/run-pdf-qa.sh: downloaded pdfmake/vfs, local venv and generated PDFs/PNGs
+.cache/
+.venv/
+out/

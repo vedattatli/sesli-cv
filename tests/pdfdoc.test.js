@@ -38,8 +38,16 @@
 
   var A4 = { width: 595.28, height: 841.89 };
   var INK = '#1d232a', MUTED = '#5b6670';
-  var TEMPLATE_IDS = ['modern', 'klasik', 'sade'];
-  var MARGINS = { modern: [0, 34, 0, 34], klasik: [50, 46, 50, 50], sade: [56, 50, 56, 50] };
+  var TEMPLATE_IDS = ['klasik', 'sade', 'modern'];
+  // v2 (brief §4.7): yeni kenar boşlukları ve şablona göre gövde puntosu (modern: §8 C8 ile 10).
+  var MARGINS = { modern: [40, 40, 40, 40], klasik: [51, 48, 51, 45], sade: [57, 48, 57, 45] };
+  var BODY = { modern: 10, klasik: 10, sade: 10.5 };
+  var MODERN_TINT_X = 360, MODERN_MAIN_W = 310, MODERN_SIDE_W = 515.28 - 310 - 22;
+  // Modern v2: içerik [başlık, vurgu çizgisi, zemin tuvali, sütunlar]; sütunlar [ana, kenar çubuğu].
+  function modernCols(dd) {
+    for (var i = 0; i < dd.content.length; i++) if (Array.isArray(dd.content[i].columns) && dd.content[i].columns.length === 2 && dd.content[i].columns[0].width === MODERN_MAIN_W) return dd.content[i].columns;
+    return null;
+  }
   var ALLOWED_FN_KEYS = { background: true, footer: true, pageBreakBefore: true, header: true };
   // 1x1 piksellik gerçek PNG ve JPEG (yalnızca data URL biçimi önemli).
   var PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -136,7 +144,7 @@
         if (v.markerColor !== undefined && !/^#[0-9a-fA-F]{6}$/.test(v.markerColor)) problems.push('geçersiz işaret rengi @ ' + path);
         // pdfmake'in tanıdığı bir içerik türü olmalı (stil/ayar nesneleri hariç)
         var isContentArray = anc.length && Array.isArray(anc[anc.length - 1]) && /(\.content|\.stack|\.columns|\.ul)\[\d+\]$/.test(path);
-        if (isContentArray && v.text === undefined && !v.stack && !v.columns && !v.ul && !v.ol && !v.canvas && !v.image && !v.table) {
+        if (isContentArray && v.text === undefined && !v.stack && !v.columns && !v.ul && !v.ol && !v.canvas && !v.image && !v.svg && !v.table) {
           problems.push('tanınmayan içerik düğümü @ ' + path);
         }
       }
@@ -198,34 +206,52 @@
     cv.certs = certs.join('\n');
     cv.refs = 'Ad Soyad — Ünvan, Şirket · 0532 000 00 00\nReferanslar talep edildiğinde sunulacaktır.';
     cv.marital = 'Evli';
+    cv.projects = [];
+    for (var pi = 0; pi < 6; pi++) {
+      var pl = [];
+      for (var pb = 0; pb < 4; pb++) {
+        pl.push('Proje ' + (pi + 1) + '.' + (pb + 1) + ': Dağıtıksistemlerdeölçeklenebilirlikçalışmaları kapsamında ' +
+          'kuyruk tabanlı mimariyi tasarlayıp canlıya aldım; ğüşıöç ĞÜŞİÖÇ.');
+      }
+      cv.projects.push({
+        id: 'p' + pi, name: 'Çok Uzun Adlı Açık Kaynak Proje ' + (pi + 1) + ' — Gerçek Zamanlı Envanter ve Sipariş Eşleştirme Motoru',
+        tech: 'Python, FastAPI, PostgreSQL, Redis, Kafka, Docker, Kubernetes, Terraform, GitHub Actions, Grafana',
+        link: 'github.com/gulsen-caglayan-ozturkoglu/cok-uzun-depo-adi-gercek-zamanli-envanter-motoru-' + pi,
+        desc: pl.join('\n')
+      });
+    }
     return cv;
   }
   var STRESS = stressCv();
 
   var CVS = { SAMPLE: SAMPLE, EMPTY: EMPTY, EMPTY_ENTRIES: EMPTY_ENTRIES, NAME_ONLY: NAME_ONLY, STRESS: STRESS };
 
+  // v2: iletişim her şablonda başlıkta (modern'de de "İletişim" bölümü yok — brief §4.5).
   function headingsFor(tpl, lang) {
     var L = CVPdf.labels(lang);
-    var keys = ['profile', 'experience', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal'];
-    if (tpl === 'modern') keys.push('contact');
+    var keys = ['profile', 'experience', 'projects', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal'];
     return keys.map(function (k) { return lang === 'en' ? L[k].toUpperCase() : trUpper(L[k]); });
   }
   function allHeadings(lang) {
     var L = CVPdf.labels(lang);
-    return ['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal']
+    return ['contact', 'profile', 'experience', 'projects', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal']
       .map(function (k) { return lang === 'en' ? L[k].toUpperCase() : trUpper(L[k]); });
   }
 
   /* ================================================================ API yüzeyi */
 
   print('# API');
-  same(CVPdf.TEMPLATES, [
-    { id: 'modern', tr: 'Modern', en: 'Modern', photo: true },
-    { id: 'klasik', tr: 'Klasik', en: 'Classic', photo: true },
-    { id: 'sade', tr: 'Sade (ATS)', en: 'Plain (ATS)', photo: false }
+  // v2: klasik önce (varsayılan/yedek), modern en sonda; her şablonda seçici açıklaması (desc).
+  same(CVPdf.TEMPLATES.map(function (t) { return [t.id, t.tr, t.en, t.photo]; }), [
+    ['klasik', 'Klasik', 'Classic', true], ['sade', 'Sade', 'Plain', false], ['modern', 'Modern', 'Modern', true]
   ], 'TEMPLATES');
+  same(CVPdf.TEMPLATES.map(function (t) { return t.desc; }), [
+    'Kurumsal başvurular, e-posta ve çıktı için',
+    'İş ilanı sitelerine yüklemek için en güvenli (ATS)',
+    'E-postayla gönderim ve çıktı için; ilan sitelerinde Sade önerilir.'
+  ], 'TEMPLATES desc (brief §4.3–4.5)');
   same(CVPdf.ACCENTS, ['#1F5C4A', '#23395B', '#7A2E3A', '#36404A', '#7A5212'], 'ACCENTS');
-  ['labels', 'hasContent', 'registerFonts', 'build', 'fileName', 'mix'].forEach(function (f) {
+  ['labels', 'hasContent', 'registerFonts', 'build', 'fileName', 'mix', 'buildLetter', 'letterLayout', 'defaultTemplate', 'sectionOrder', 'skillGroups'].forEach(function (f) {
     eq(typeof CVPdf[f], 'function', 'CVPdf.' + f + ' fonksiyon');
   });
 
@@ -245,20 +271,22 @@
   /* labels */
   same(CVPdf.labels('tr'), (function () {
     var o = {
-      contact: 'İletişim', profile: 'Profil', experience: 'İş Deneyimi', education: 'Eğitim', skills: 'Yetenekler',
-      languages: 'Diller', certs: 'Sertifikalar ve Kurslar', hobbies: 'Hobiler', refs: 'Referanslar',
-      personal: 'Kişisel Bilgiler', birth: 'Doğum Tarihi', military: 'Askerlik Durumu', license: 'Sürücü Belgesi',
-      marital: 'Medeni Durum', phone: 'Telefon', email: 'E-posta', city: 'Konum', web: 'Web'
+      contact: 'İletişim', profile: 'Profil', experience: 'İş Deneyimi', projects: 'Projeler', education: 'Eğitim', skills: 'Yetenekler',
+      languages: 'Diller', certs: 'Sertifikalar', hobbies: 'İlgi Alanları', refs: 'Referanslar',
+      personal: 'Kişisel Bilgiler', birth: 'Doğum Yılı', military: 'Askerlik Durumu', license: 'Sürücü Belgesi',
+      marital: 'Medeni Durum', phone: 'Telefon', email: 'E-posta', city: 'Konum', web: 'Web', github: 'GitHub',
+      refsLine: 'Referanslar talep üzerine iletilir.'
     };
     o.summary = o.profile; o.jobs = o.experience; o.edu = o.education; o.langs = o.languages; o.location = o.city;
     return o;
   })(), 'labels(tr)');
   same(CVPdf.labels('en'), (function () {
     var o = {
-      contact: 'Contact', profile: 'Profile', experience: 'Experience', education: 'Education', skills: 'Skills',
+      contact: 'Contact', profile: 'Profile', experience: 'Experience', projects: 'Projects', education: 'Education', skills: 'Skills',
       languages: 'Languages', certs: 'Certifications', hobbies: 'Interests', refs: 'References',
-      personal: 'Personal Details', birth: 'Date of Birth', military: 'Military Service', license: 'Driving Licence',
-      marital: 'Marital Status', phone: 'Phone', email: 'Email', city: 'Location', web: 'Web'
+      personal: 'Personal Details', birth: 'Year of Birth', military: 'Military Service', license: 'Driving Licence',
+      marital: 'Marital Status', phone: 'Phone', email: 'Email', city: 'Location', web: 'Web', github: 'GitHub',
+      refsLine: 'References available upon request.'
     };
     o.summary = o.profile; o.jobs = o.experience; o.edu = o.education; o.langs = o.languages; o.location = o.city;
     return o;
@@ -270,7 +298,7 @@
 
   /* SAMPLE */
   print('# SAMPLE');
-  ['name', 'title', 'phone', 'email', 'city', 'web', 'summary', 'skills', 'langs', 'certs', 'hobbies', 'refs', 'birth', 'military', 'license']
+  ['name', 'title', 'phone', 'email', 'city', 'web', 'github', 'summary', 'skills', 'langs', 'certs', 'hobbies', 'refs', 'birth', 'military', 'license']
     .forEach(function (f) { ok(typeof SAMPLE[f] === 'string' && SAMPLE[f].trim() !== '', 'SAMPLE.' + f + ' dolu'); });
   eq(SAMPLE.photo, '', 'SAMPLE.photo boş');
   ['marital'].forEach(function (f) { eq(typeof SAMPLE[f], 'string', 'SAMPLE.' + f + ' string'); });
@@ -290,6 +318,17 @@
   ok(/[çğıöşüİ]/.test(SAMPLE.summary), 'SAMPLE Türkçe karakterli');
   ok(/@example\.com$/.test(SAMPLE.email), 'SAMPLE e-postası ayrılmış alan adında');
   ok(SAMPLE.web.indexOf('http') !== 0, 'SAMPLE web protokolsüz');
+  eq(SAMPLE.github, 'github.com/emreaksoy-ornek', 'SAMPLE.github (SPEC)');
+  ok(Array.isArray(SAMPLE.projects), 'SAMPLE.projects dizi');
+  eq(SAMPLE.projects.length, 2, 'SAMPLE 2 proje');
+  SAMPLE.projects.forEach(function (pr, i) {
+    ['id', 'name', 'tech', 'link', 'desc'].forEach(function (f) { ok(typeof pr[f] === 'string' && pr[f].trim() !== '', 'SAMPLE.projects[' + i + '].' + f); });
+    ok(/^github\.com\/emreaksoy-ornek\/[a-z0-9-]+$/.test(pr.link), 'SAMPLE.projects[' + i + '] bağlantısı protokolsüz, örnek hesapta');
+    var n = CVParse.splitLines(pr.desc).length;
+    ok(n >= 2 && n <= 3, 'SAMPLE.projects[' + i + '] 2–3 madde (' + n + ')');
+    ok(CVParse.splitList(pr.tech).length >= 2, 'SAMPLE.projects[' + i + '] teknolojiler virgüllü');
+  });
+  eq(SAMPLE.projects[0].id === SAMPLE.projects[1].id, false, 'SAMPLE proje kimlikleri benzersiz');
   ok(CVPdf.hasContent(SAMPLE), 'hasContent(SAMPLE)');
 
   /* hasContent */
@@ -309,10 +348,19 @@
   eq(CVPdf.hasContent({ marital: 'Bekar' }), true, 'kişisel bilgi');
   eq(CVPdf.hasContent({ photo: JPG }), true, 'yalnızca fotoğraf');
   eq(CVPdf.hasContent({ phone: 5321234567 }), true, 'sayı değer');
+  eq(CVPdf.hasContent({ github: 'github.com/ali' }), true, 'yalnızca github');
+  eq(CVPdf.hasContent({ github: '  ' }), false, 'boşluklu github');
+  eq(CVPdf.hasContent({ projects: [{ id: 'p', name: 'Stok Takip' }] }), true, 'yalnızca proje adı');
+  eq(CVPdf.hasContent({ projects: [{ id: 'p', desc: 'Bir API yazdım.' }] }), true, 'yalnızca proje açıklaması');
+  eq(CVPdf.hasContent({ projects: [{ id: 'p', tech: 'Python', link: 'github.com/a/b' }] }), false, 'adsız/açıklamasız proje (build basmaz) içerik değil');
+  eq(CVPdf.hasContent({ projects: [{ id: 'p', name: ' ', desc: '\n \n' }] }), false, 'boşluklu proje');
+  eq(CVPdf.hasContent({ projects: [null, 4, 'Proje', []] }), false, 'çöp proje girdileri');
+  eq(CVPdf.hasContent({ projects: 'Proje' }), false, 'dizi olmayan projects');
 
   /* fileName */
-  eq(CVPdf.fileName(SAMPLE), 'Emre_Aksoy_CV.pdf', 'fileName(SAMPLE)');
-  eq(CVPdf.fileName({ name: 'Ayşe Yılmaz' }), 'Ayse_Yilmaz_CV.pdf', 'fileName Türkçe');
+  // v2 (brief §4.1 File): tire ile "Ayse-Kaya-CV.pdf".
+  eq(CVPdf.fileName(SAMPLE), 'Emre-Aksoy-CV.pdf', 'fileName(SAMPLE)');
+  eq(CVPdf.fileName({ name: 'Ayşe Yılmaz' }), 'Ayse-Yilmaz-CV.pdf', 'fileName Türkçe');
   eq(CVPdf.fileName({ name: '' }), 'CV.pdf', 'fileName boş');
   eq(CVPdf.fileName(null), 'CV.pdf', 'fileName null');
 
@@ -385,31 +433,29 @@
           eq(dd.pageSize, 'A4', key + ': A4');
           eq(dd.pageOrientation, 'portrait', key + ': dikey');
           same(dd.pageMargins, MARGINS[tpl], key + ': sayfa kenar boşlukları');
-          same(dd.defaultStyle, { font: 'Roboto', fontSize: 9.5, lineHeight: 1.28, color: INK }, key + ': defaultStyle');
+          same(dd.defaultStyle, { font: 'Roboto', fontSize: BODY[tpl], lineHeight: 1.15, color: INK, fontFeatures: { liga: false } }, key + ': defaultStyle');
           var nm = typeof cv.name === 'string' ? cv.name.trim() : '';
-          same(dd.info, { title: nm ? nm + ' — CV' : 'CV', author: nm, subject: 'CV', creator: 'Sesli CV' }, key + ': info');
+          var tt = typeof cv.title === 'string' ? cv.title.trim() : '';
+          same(dd.info, { title: [nm, tt, 'CV'].filter(Boolean).join(' — '), author: nm, subject: 'CV', creator: 'Sesli CV' }, key + ': info ("Ad Soyad — Unvan — CV")');
           ok(Array.isArray(dd.content) && dd.content.length > 0, key + ': content dizi');
 
-          // background
+          // background: modern kenar çubuğu zemini 1. sayfada akıştaki tuvalde, 2. sayfa ve sonrasında background()'da.
           if (tpl === 'modern') {
             eq(typeof dd.background, 'function', key + ': background fonksiyon');
-            [1, 2].forEach(function (page) {
-              var bg = attempt(function () { return dd.background(page, { width: A4.width, height: A4.height }); }, key + ': background(' + page + ') atmaz').value;
-              if (!bg) return;
-              validateTree(bg, key + ': background(' + page + ')', false);
-              same(bg, { canvas: [{ type: 'rect', x: 0, y: 0, w: 188, h: A4.height, color: accent }] }, key + ': kenar çubuğu dikdörtgeni (sayfa ' + page + ')');
-            });
-            var bg0 = dd.background(1, undefined);
-            eq(bg0 && bg0.canvas[0].h, A4.height, key + ': background pageSize yoksa A4 yüksekliği');
+            eq(dd.background(1, { width: A4.width, height: A4.height }), null, key + ': background(1) yok (1. sayfada zemin başlığın altından başlar)');
+            var hasSections = !!modernCols(dd);
+            var bg = attempt(function () { return dd.background(2, { width: A4.width, height: A4.height }); }, key + ': background(2) atmaz').value;
+            if (hasSections) {
+              if (bg) validateTree(bg, key + ': background(2)', false);
+              same(bg, { canvas: [{ type: 'rect', x: MODERN_TINT_X, y: 0, w: A4.width - MODERN_TINT_X, h: A4.height, color: CVPdf.mix(accent, '#ffffff', 0.9) }] }, key + ': kenar çubuğu zemini (sayfa 2, açık ton)');
+              var bg0 = dd.background(3, undefined);
+              eq(bg0 && bg0.canvas[0].h, A4.height, key + ': background pageSize yoksa A4 yüksekliği');
+            } else eq(bg, null, key + ': bölüm yoksa zemin yok');
           } else {
-            ok(dd.background === undefined || typeof dd.background === 'function', key + ': background yok ya da fonksiyon');
-            if (typeof dd.background === 'function') {
-              var b2 = dd.background(1, { width: A4.width, height: A4.height });
-              if (b2) validateTree(b2, key + ': background', false);
-            }
+            eq(dd.background, undefined, key + ': background yok');
           }
 
-          // footer
+          // footer: yalnızca 2. sayfa ve sonrası (brief §4.1)
           eq(typeof dd.footer, 'function', key + ': footer fonksiyon');
           var ft = attempt(function () { return dd.footer(2, 3); }, key + ': footer(2,3) atmaz').value;
           if (ft) {
@@ -418,25 +464,24 @@
             eq(ft.fontSize, 7.5, key + ': footer 7.5pt');
             eq(ft.color, MUTED, key + ': footer MUTED');
             eq(ft.alignment, 'right', key + ': footer sağa yaslı');
-            ok(Array.isArray(ft.margin) && ft.margin[0] >= (tpl === 'modern' ? 188 : MARGINS[tpl][0]), key + ': footer sol boşluğu kenar çubuğunu/kenarı korur');
-            eq(ft.margin[2], tpl === 'modern' ? 34 : MARGINS[tpl][2], key + ': footer sağ kenar hizası');
+            ok(Array.isArray(ft.margin) && ft.margin[0] >= MARGINS[tpl][0], key + ': footer sol boşluğu kenarı korur');
+            eq(ft.margin[2], tpl === 'modern' ? A4.width - 40 - MODERN_MAIN_W : MARGINS[tpl][2], key + ': footer sağ kenar hizası (modern: ana sütunun sağ kenarı)');
           } else ok(false, key + ': footer(2,3) düğüm döndürmeli');
           eq(dd.footer(1, 1), null, key + ': tek sayfada footer yok');
+          eq(dd.footer(1, 2), null, key + ': 1. sayfada footer yok');
 
-          // görseller
+          // görseller: klasik 3:4 vesikalık (fit 68×91), modern SVG ile yuvarlak kırpma, sade hiç
           var images = findNodes(dd.content, function (n) { return n.image !== undefined; });
+          var svgs = findNodes(dd.content, function (n) { return n.svg !== undefined; });
           var expectImage = showPhoto && tpl !== 'sade' && typeof cv.photo === 'string' && cv.photo.indexOf('data:image/') === 0;
-          eq(images.length, expectImage ? 1 : 0, key + ': fotoğraf sayısı');
-          if (expectImage && images.length) {
-            var img = images[0].node;
-            if (tpl === 'modern') {
-              eq(img.image, PNG, key + ': modern yuvarlak (photoRound) fotoğrafı kullanır');
-              same(img.fit, [112, 112], key + ': modern foto 112pt');
-              eq(img.alignment, 'center', key + ': modern foto ortalı');
-            } else {
-              eq(img.image, cv.photo, key + ': klasik kare fotoğrafı kullanır');
-              same(img.fit, [76, 76], key + ': klasik foto 76×76');
-            }
+          eq(images.length + svgs.length, expectImage ? 1 : 0, key + ': fotoğraf sayısı');
+          if (expectImage && tpl === 'modern') {
+            eq(images.length, 0, key + ': modern bitmap yerine SVG kırpma');
+            ok(svgs.length === 1 && svgs[0].node.svg.indexOf(cv.photo) >= 0 && /<clipPath[^>]*><circle cx="42" cy="42" r="42"\/>/.test(svgs[0].node.svg) &&
+              /preserveAspectRatio="xMidYMid slice"/.test(svgs[0].node.svg), key + ': modern 84pt yuvarlak, ortadan kırpılmış (cv.photo; photoRound kullanılmaz)');
+          } else if (expectImage) {
+            eq(images[0].node.image, cv.photo, key + ': klasik fotoğrafı kullanır');
+            same(images[0].node.fit, [68, 91], key + ': klasik foto 3:4 (68×91)');
           }
 
           // fontlar
@@ -464,7 +509,7 @@
             headingsFor(tpl, lang).forEach(function (h) {
               ok(lines.indexOf(h) >= 0, key + ': "' + h + '" bölümü var');
             });
-            if (tpl !== 'modern') ok(lines.indexOf(lang === 'en' ? 'CONTACT' : 'İLETİŞİM') < 0, key + ': iletişim başlıkta, bölüm değil');
+            ok(lines.indexOf(lang === 'en' ? 'CONTACT' : 'İLETİŞİM') < 0, key + ': iletişim başlıkta, bölüm değil');
           }
         });
       });
@@ -512,7 +557,8 @@
       ok(good, key + ': ' + j.company + ' — başlık + ilk madde bölünmez, ikinci madde dışarıda');
       ok(textsOf(dd.content).indexOf(bullets[bullets.length - 1]) >= 0, key + ': son madde de var');
       var lines = allLines(dd);
-      var range = CVParse.formatRange(j.start, j.end, 'tr');
+      // v2: sade sayısal tarih ("03/2021 – Günümüz"), klasik/modern ay adı (brief §3.2)
+      var range = CVParse.formatRange(j.start, j.end, 'tr', { numeric: tpl === 'sade' });
       ok(lines.some(function (l) { return l.indexOf(range) >= 0; }), key + ': tarih aralığı "' + range + '"');
     });
   });
@@ -523,60 +569,65 @@
     ok(tr.some(function (l) { return /Günümüz/.test(l); }), 'tr: "Günümüz"');
     ok(en.some(function (l) { return /Present/.test(l); }), 'en: "Present"');
     ok(en.indexOf('English') >= 0 && en.indexOf('Turkish') >= 0, 'en: dil adları çevrildi');
-    ok(en.indexOf('Native') >= 0 && en.indexOf('Advanced') >= 0, 'en: seviye etiketleri');
-    ok(tr.indexOf('Ana dil') >= 0 && tr.indexOf('İleri') >= 0, 'tr: seviye etiketleri');
+    // v2: CEFR + sınav, çubuk yok ("C1 (Advanced) · IELTS 7.0 (2023)")
+    ok(en.indexOf('Native') >= 0 && en.indexOf('C1 (Advanced) · IELTS 7.0 (2023)') >= 0 && en.indexOf('A2 (Elementary)') >= 0, 'en: seviye etiketleri');
+    ok(tr.indexOf('Ana dil') >= 0 && tr.indexOf('C1 (İleri) · IELTS 7.0 (2023)') >= 0 && tr.indexOf('A2 (Temel)') >= 0, 'tr: seviye etiketleri');
   })();
 
-  // Modern: başlık, ünvan, dil çubukları, bağlantılar
+  // Modern v2 (brief §4.5): tam genişlik başlık önce; altında [ana 310 | kenar çubuğu 183.28]; çubuk yok.
   (function () {
     var dd = get('SAMPLE/modern/tr/foto');
-    var accent = dd.background(1, A4).canvas[0].color;
+    var accent = CVPdf.ACCENTS.filter(function (a) { return JSON.stringify(dd.content[1]).indexOf(a) >= 0; })[0];
     var title = findNodes(dd.content, function (n) { return n.text === 'KIDEMLİ PROJE YÖNETİCİSİ'; });
-    ok(title.length === 1 && title[0].node.characterSpacing === 1.6 && title[0].node.color === accent && title[0].node.bold, 'modern: ünvan büyük harf (Türkçe İ), aralıklı, vurgu renginde');
+    ok(title.length === 1 && title[0].node.characterSpacing === 0.7 && title[0].node.color === accent && title[0].node.bold && title[0].node.fontSize === 10, 'modern: ünvan büyük harf (Türkçe İ), 0.7 aralık, vurgu renginde');
     var name = findNodes(dd.content, function (n) { return n.text === 'Emre Aksoy'; })[0];
     ok(name && name.node.font === 'DMSerif' && name.node.fontSize === 30 && name.node.lineHeight === 1, 'modern: isim DMSerif 30pt');
-    var cols = dd.content[0].columns;
-    ok(cols && cols.length === 2 && cols[0].width === 188 && cols[1].width === '*' && dd.content[0].columnGap === 0, 'modern: iki sütun 188 + *');
-    same(cols[0].margin, [22, 0, 18, 0], 'modern: kenar çubuğu iç boşluğu');
-    same(cols[1].margin, [24, 0, 34, 0], 'modern: ana sütun boşluğu');
-
-    var bars = findNodes(cols[0], function (n) { return Array.isArray(n.canvas) && n.canvas.length === 5 && n.canvas[0].type === 'rect'; });
-    eq(bars.length, 3, 'modern: 3 dil için seviye çubuğu');
-    var fills = bars.map(function (b) { return b.node.canvas.filter(function (r) { return r.color === '#ffffff'; }).length; });
-    same(fills, [5, 4, 1], 'modern: dolu dilimler (ana dil 5, ileri 4, başlangıç 1)');
-    ok(bars.every(function (b) { return b.node.canvas.every(function (r) { return r.h > 0 && r.w > 0 && r.r > 0 && r.x + r.w <= 148.01; }); }), 'modern: çubuk dilimleri kenar çubuğuna sığar');
-
+    ok(textsOf(dd.content[0]).indexOf('Emre Aksoy') >= 0 && textsOf(dd.content[0]).indexOf('emre.aksoy@example.com') >= 0, 'modern: ilk düğüm başlık (ad + iletişim)');
+    ok(Array.isArray(dd.content[1].canvas) && dd.content[1].canvas[0].lineWidth === 1 && Math.abs(dd.content[1].canvas[0].x2 - 515.28) < 0.01, 'modern: başlık altında tam genişlik 1pt çizgi');
+    var cols = modernCols(dd);
+    ok(cols && cols[0].width === MODERN_MAIN_W && Math.abs(cols[1].width - MODERN_SIDE_W) < 0.01, 'modern: iki sütun 310 + 183.28 (sabit genişlik)');
+    var colRow = dd.content.filter(function (n) { return n.columns === cols; })[0];
+    eq(colRow.columnGap, 22, 'modern: sütun arası 22pt');
+    eq(findNodes(dd.content, function (n) { return Array.isArray(n.canvas) && n.canvas.length === 5; }).length, 0, 'modern: dil seviye çubuğu yok');
+    eq(JSON.stringify(cols[1]).indexOf('"r":'), -1, 'modern: kenar çubuğunda yuvarlatılmış çubuk (seviye göstergesi) yok');
     var json = JSON.stringify(dd.content);
     ok(json.indexOf('"link":"mailto:emre.aksoy@example.com"') >= 0, 'modern: e-posta bağlantısı');
     ok(json.indexOf('"link":"https://linkedin.com/in/emre-aksoy-ornek"') >= 0, 'modern: web bağlantısı');
-    var skillsUl = findNodes(cols[0], function (n) { return Array.isArray(n.ul); });
-    ok(skillsUl.length >= 1 && skillsUl.every(function (u) { return u.node.type === 'square'; }), 'modern: yetenekler kare işaretli');
-    var mainUl = findNodes(cols[1], function (n) { return Array.isArray(n.ul); });
-    ok(mainUl.length > 0 && mainUl.every(function (u) { return u.node.markerColor === accent && u.node.fontSize === 9.5; }), 'modern: ana sütun maddeleri vurgu renkli işaretli 9.5pt');
-    var heads = findNodes(cols[1], function (n) { return n.text === 'İŞ DENEYİMİ'; });
-    ok(heads.length && heads[0].node.fontSize === 9 && heads[0].node.bold && heads[0].node.color === accent, 'modern: ana başlık stili');
-    var sideHead = findNodes(cols[0], function (n) { return n.text === 'YETENEKLER'; });
-    ok(sideHead.length && sideHead[0].node.fontSize === 8 && sideHead[0].node.characterSpacing === 1.4, 'modern: kenar başlığı stili');
-    var dates = findNodes(cols[1], function (n) { return n.width === 'auto' && n.fontSize === 8.5 && n.color === MUTED; });
-    eq(dates.length, 5, 'modern: 3 iş + 2 eğitim tarihi sağda');
+    eq(findNodes(cols[1], function (n) { return Array.isArray(n.ul); }).length, 0, 'modern: kenar çubuğunda madde imi yok (düz satırlar)');
+    var mainUl = findNodes(cols[0], function (n) { return Array.isArray(n.ul); });
+    ok(mainUl.length > 0 && mainUl.every(function (u) { return u.node.markerColor === accent && u.node.fontSize === 10; }), 'modern: ana sütun maddeleri vurgu renkli işaretli 10pt (§8 C8)');
+    var heads = findNodes(cols[0], function (n) { return n.text === 'İŞ DENEYİMİ'; });
+    ok(heads.length && heads[0].node.fontSize === 9.5 && heads[0].node.bold && heads[0].node.color === accent && heads[0].node.characterSpacing === 0.7, 'modern: ana başlık stili (9.5, 0.7)');
+    var sideHead = findNodes(cols[1], function (n) { return n.text === 'YETENEKLER'; });
+    ok(sideHead.length && sideHead[0].node.fontSize === 9 && sideHead[0].node.characterSpacing === 0.7, 'modern: kenar başlığı stili (9, 0.7)');
+    var dates = findNodes(cols[0], function (n) { return n.width === 'auto' && n.fontSize === 9 && n.color === MUTED; });
+    eq(dates.length, 5, 'modern: 3 iş + 2 eğitim tarihi sağda (9pt, §8 C8)');
+    eq(findNodes(cols[1], function (n) { return /Mart 2021|Atlas Lojistik/.test(typeof n.text === 'string' ? n.text : ''); }).length, 0, 'modern: kenar çubuğunda unvan/şirket/tarih yok');
+    var tint = dd.content.filter(function (n) { return Array.isArray(n.canvas) && n.canvas.length === 1 && n.canvas[0].h < 0; })[0];
+    ok(tint && tint.canvas[0].color === CVPdf.mix(accent, '#ffffff', 0.9) && tint.canvas[0].x === MODERN_TINT_X - 40 &&
+      Math.abs(tint.canvas[0].x + 40 + tint.canvas[0].w - A4.width) < 0.01 && tint.canvas[0].y + tint.canvas[0].h <= 0,
+      'modern: 1. sayfa zemini başlığın altından sayfa sonuna (akışta yükseklik 0)');
+    ok(dd.content.indexOf(tint) < dd.content.indexOf(colRow), 'modern: zemin sütunlardan önce çizilir');
   })();
 
-  // Modern: photoRound yoksa kare foto; showPhoto=false foto yok; fotoğraf yoksa photoRound tek başına kullanılmaz
+  // Modern fotoğraf: cv.photo SVG ile yuvarlak kırpılır (photoRound artık kullanılmaz); showPhoto=false foto yok.
   (function () {
     var cv = clone(SAMPLE); cv.photo = JPG;
+    function svgOf(dd) { return findNodes(dd.content, function (n) { return n.svg !== undefined; }); }
     var a = CVPdf.build(cv, { template: 'modern', showPhoto: true, photoRound: '' });
-    var imgs = findNodes(a.content, function (n) { return n.image !== undefined; });
-    ok(imgs.length === 1 && imgs[0].node.image === JPG, 'modern: photoRound yoksa kare foto');
-    var b = CVPdf.build(cv, { template: 'modern', showPhoto: true, photoRound: 'data:image/gif;base64,R0lG' });
-    ok(findNodes(b.content, function (n) { return n.image !== undefined; })[0].node.image === JPG, 'modern: geçersiz photoRound yok sayılır');
+    ok(svgOf(a).length === 1 && svgOf(a)[0].node.svg.indexOf(JPG) >= 0 && svgOf(a)[0].node.width === 84, 'modern: photoRound yoksa da yuvarlak (SVG, 84pt)');
+    var b = CVPdf.build(cv, { template: 'modern', showPhoto: true, photoRound: PNG });
+    ok(svgOf(b).length === 1 && svgOf(b)[0].node.svg.indexOf(JPG) >= 0 && JSON.stringify(b).indexOf(PNG) < 0, 'modern: photoRound verilse de asıl fotoğraf kırpılır');
+    eq(svgOf(CVPdf.build(cv, { template: 'modern', showPhoto: false })).length, 0, 'modern: showPhoto=false foto yok');
     var c = CVPdf.build(SAMPLE, { template: 'modern', showPhoto: true, photoRound: PNG });
-    eq(findNodes(c.content, function (n) { return n.image !== undefined; }).length, 0, 'modern: cv.photo boşsa photoRound da yok');
+    eq(findNodes(c.content, function (n) { return n.image !== undefined || n.svg !== undefined; }).length, 0, 'modern: cv.photo boşsa photoRound da yok');
     var bad = clone(SAMPLE); bad.photo = 'https://ornek.com/foto.jpg';
     TEMPLATE_IDS.forEach(function (tpl) {
-      eq(findNodes(CVPdf.build(bad, { template: tpl, showPhoto: true }).content, function (n) { return n.image !== undefined; }).length, 0, tpl + ': data URL olmayan foto yok sayılır');
+      eq(findNodes(CVPdf.build(bad, { template: tpl, showPhoto: true }).content, function (n) { return n.image !== undefined || n.svg !== undefined; }).length, 0, tpl + ': data URL olmayan foto yok sayılır');
     });
     var def = CVPdf.build(cv, { template: 'klasik' });
     eq(findNodes(def.content, function (n) { return n.image !== undefined; }).length, 1, 'klasik: showPhoto verilmezse varsayılan açık');
+    eq(findNodes(CVPdf.build(cv, { template: 'sade' }).content, function (n) { return n.image !== undefined || n.svg !== undefined; }).length, 0, 'sade: hiçbir zaman fotoğraf yok');
   })();
 
   // Klasik
@@ -584,20 +635,24 @@
     var dd = get('STRESS/klasik/tr/foto');
     var accent = CVPdf.ACCENTS.filter(function (a) { return JSON.stringify(dd).indexOf(a) >= 0; })[0];
     var rule = findNodes(dd.content, function (n) { return Array.isArray(n.canvas) && n.canvas[0].lineWidth === 1.2; });
-    ok(rule.length === 1 && rule[0].node.canvas[0].lineColor === accent && Math.abs(rule[0].node.canvas[0].x2 - 495.28) < 0.01, 'klasik: başlık altında 1.2pt vurgu çizgisi');
+    ok(rule.length === 1 && rule[0].node.canvas[0].lineColor === accent && Math.abs(rule[0].node.canvas[0].x2 - 493.28) < 0.01, 'klasik: başlık altında 1.2pt vurgu çizgisi (v2 genişlik 493.28)');
     var title = findNodes(dd.content, function (n) { return n.text === STRESS.title; });
     ok(title.length === 1 && title[0].node.font === 'DMSerif' && title[0].node.italics === true && title[0].node.fontSize === 13, 'klasik: ünvan DMSerif italik 13pt');
-    var contact = findNodes(dd.content, function (n) { return Array.isArray(n.text) && n.fontSize === 8.5; });
-    ok(contact.length === 1 && nodeText(contact[0].node) === [STRESS.phone, STRESS.email, STRESS.city, STRESS.web].join('  ·  '), 'klasik: iletişim satırı "  ·  " ile');
-    var gutters = findNodes(dd.content, function (n) { return Array.isArray(n.columns) && n.columns[0].width === 108; });
-    ok(gutters.length >= 9, 'klasik: bölümler 108pt başlık oluğuyla');
+    // v2: iletişim 9.5pt; tek satıra sığmayınca bağlantılar (Web, GitHub) ikinci satırda.
+    var contact = findNodes(dd.content, function (n) { return Array.isArray(n.text) && n.text.some(function (x) { return /^mailto:/.test(x.link || ''); }); });
+    ok(contact.length === 1 && contact[0].node.fontSize === 9.5 && nodeText(contact[0].node) === [STRESS.phone, STRESS.email, STRESS.city].join('  ·  ') + '\n' + [STRESS.web, STRESS.github].join('  ·  '),
+      'klasik: iletişim "  ·  " ile, uzunsa bağlantılar ikinci satırda (GitHub en sonda)');
+    var gutters = findNodes(dd.content, function (n) { return Array.isArray(n.columns) && n.columns[0].width === 92; });
+    ok(gutters.length >= 9, 'klasik: bölümler 92pt başlık oluğuyla (v2)');
     var dd2 = get('SAMPLE/klasik/tr/fotosuz');
     var lines = allLines(dd2);
     ok(lines.indexOf('Türkçe — Ana dil') >= 0, 'klasik: "Türkçe — Ana dil"');
-    ok(lines.indexOf('Doğum Tarihi: 14 Mayıs 1991') >= 0, 'klasik: kişisel bilgi "Etiket: değer"');
+    ok(lines.indexOf('Doğum Yılı: 1991') >= 0, 'klasik: kişisel bilgi "Etiket: değer" (v2: Doğum Yılı)');
     ok(lines.some(function (l) { return l.indexOf('Proje planlama  ·  Risk yönetimi') === 0; }), 'klasik: yetenekler "  ·  " ile');
     ok(lines.indexOf(CVParse.splitList(SAMPLE.hobbies).join(', ')) >= 0, 'klasik: hobiler virgülle');
-    var certHead = findNodes(dd2.content, function (n) { return n.text === 'SERTİFİKALAR VE KURSLAR'; })[0];
+    // v2: "Sertifikalar" tek satır; iki satırlık oluk başlığı saha profilindeki "Belgeler ve Sertifikalar".
+    var dd3 = CVPdf.build(SAMPLE, { template: 'klasik', profile: 'saha' });
+    var certHead = findNodes(dd3.content, function (n) { return n.text === 'BELGELER VE SERTİFİKALAR'; })[0];
     var certBlock = certHead && nearestUnbreakable(certHead.anc);
     ok(certBlock && textsOf(certBlock).filter(function (t) { return /\(20\d\d\)$/.test(t); }).length >= 2, 'klasik: iki satırlık başlığın yanına en az iki sertifika (boşluk kalmasın)');
     ok(lines.indexOf('Endüstri Mühendisliği (Lisans)') >= 0, 'klasik: program (derece)');
@@ -618,16 +673,16 @@
         eq(canv.length, heads.length, key + ': tuval sayısı = başlık sayısı');
         ok(canv.every(function (c) { return c.node.canvas.length === 1 && c.node.canvas[0].type === 'line' && c.node.canvas[0].lineWidth === 0.5; }), key + ': tuvaller 0.5pt çizgi');
         var colored = findNodes(dd.content, function (n) { return n.color !== undefined && n.color !== INK && n.color !== MUTED; });
-        ok(colored.length === heads.length && colored.every(function (c) { return heads.indexOf(c.node.text) >= 0 && c.node.bold && c.node.fontSize === 10; }), key + ': renkli metin yalnızca başlıklar');
+        ok(colored.length === heads.length && colored.every(function (c) { return heads.indexOf(c.node.text) >= 0 && c.node.bold && c.node.fontSize === 10.5 && c.node.characterSpacing === 0; }), key + ': renkli metin yalnızca başlıklar (10.5pt, aralık 0)');
         ok(findNodes(dd.content, function (n) { return n.markerColor !== undefined; }).length === 0, key + ': renkli madde işareti yok');
         var nameNode = findNodes(dd.content, function (n) { return n.text === CVS[cvName].name; })[0];
-        ok(nameNode && nameNode.node.bold && nameNode.node.fontSize === 20 && !nameNode.node.font, key + ': isim Roboto kalın 20pt');
+        ok(nameNode && nameNode.node.bold && nameNode.node.fontSize === 22 && !nameNode.node.font, key + ': isim Roboto kalın 22pt (v2)');
         var lines = allLines(dd);
         ok(lines.some(function (l) { return l.indexOf(' | ') > 0 && l.indexOf('@') > 0; }), key + ': iletişim satırı');
       });
     });
     var lines = allLines(get('SAMPLE/sade/tr/foto'));
-    ok(lines.indexOf('Atlas Lojistik A.Ş., İstanbul | ' + CVParse.formatRange('Mart 2021', 'Devam ediyor', 'tr')) >= 0, 'sade: şirket, şehir | tarih tek satırda');
+    ok(lines.indexOf('Atlas Lojistik A.Ş., İstanbul | 03/2021 – Günümüz') >= 0, 'sade: şirket, şehir | sayısal tarih tek satırda (v2)');
     ok(lines.indexOf(CVParse.splitList(SAMPLE.skills).join(', ')) >= 0, 'sade: yetenekler virgülle');
   })();
 
@@ -652,7 +707,7 @@
   (function () {
     function titleOf(t, lang) {
       var dd = CVPdf.build({ name: 'X', title: t }, { template: 'modern', lang: lang });
-      return findNodes(dd.content, function (n) { return n.characterSpacing === 1.6 && n.fontSize === 10; })[0].node.text;
+      return findNodes(dd.content, function (n) { return n.characterSpacing === 0.7 && n.fontSize === 10; })[0].node.text; // v2: aralık 0.7
     }
     eq(titleOf('Kıdemli Muhasebe Uzmanı', 'tr'), 'KIDEMLİ MUHASEBE UZMANI', 'ünvan: Türkçe büyük harf');
     eq(titleOf('Mimar', 'tr'), 'MİMAR', 'ünvan: ASCII Türkçe → İ');
@@ -663,12 +718,18 @@
 
   // Seçenek doğrulama
   (function () {
+    // v2: bilinmeyen şablon → klasik (varsayılan ve yedek); vurgu, klasik başlık çizgisinin renginden okunur.
+    function ruleColor(d) { return findNodes(d.content, function (n) { return Array.isArray(n.canvas) && n.canvas[0].lineWidth === 1.2; })[0].node.canvas[0].lineColor; }
     var dd = CVPdf.build(SAMPLE, { template: 'yok', accent: 'kırmızı', lang: 'de' });
-    same(dd.pageMargins, MARGINS.modern, 'bilinmeyen şablon → modern');
-    eq(dd.background(1, A4).canvas[0].color, '#1F5C4A', 'geçersiz vurgu → varsayılan');
+    same(dd.pageMargins, MARGINS.klasik, 'bilinmeyen şablon → klasik');
+    eq(ruleColor(dd), '#1F5C4A', 'geçersiz vurgu → varsayılan');
     ok(allLines(dd).indexOf('İŞ DENEYİMİ') >= 0, 'bilinmeyen dil → tr');
-    eq(CVPdf.build(SAMPLE, { accent: '#abc' }).background(1, A4).canvas[0].color, '#aabbcc', '3 haneli vurgu genişletilir');
-    eq(CVPdf.build(SAMPLE, { accent: '#23395B' }).background(1, A4).canvas[0].color, '#23395B', 'geçerli vurgu aynen');
+    eq(ruleColor(CVPdf.build(SAMPLE, { accent: '#abc' })), '#aabbcc', '3 haneli vurgu genişletilir');
+    eq(ruleColor(CVPdf.build(SAMPLE, { accent: '#23395B' })), '#23395B', 'geçerli vurgu aynen');
+    same(CVPdf.build(SAMPLE).pageMargins, MARGINS.klasik, 'şablon verilmezse klasik');
+    eq(CVPdf.build(SAMPLE, { template: 'modern', accent: '#abc' }).background(2, A4).canvas[0].color, CVPdf.mix('#aabbcc', '#ffffff', 0.9), 'modern: zemin vurgunun %10 tonu');
+    var sadeHead = findNodes(CVPdf.build(SAMPLE, { template: 'sade' }).content, function (n) { return n.text === 'PROFİL'; })[0];
+    eq(sadeHead.node.color, '#23395B', 'sade: vurgu verilmezse lacivert (brief §4.3)');
     var d0 = attempt(function () { return CVPdf.build(SAMPLE); }, 'build(cv) seçeneksiz');
     if (d0.ok) validateTree(d0.value, 'seçeneksiz', true);
   })();
@@ -680,7 +741,10 @@
       { name: 123, title: null, jobs: 'iş', edu: { a: 1 }, skills: ['a'], langs: 5, photo: 7 },
       { jobs: [null, 5, 'x', {}, { role: 'Şef', desc: 42 }], edu: [null, { school: 'Okul' }], refs: '\n\n', certs: '•\n-\n1.' },
       { name: 'Ali', web: 'https://ali.dev/', email: '  ali @ornek.com ', phone: '0532 111 22 33' },
-      { langs: 'ana dil, c1', skills: ',,, ;;', hobbies: ' ve ' }
+      { langs: 'ana dil, c1', skills: ',,, ;;', hobbies: ' ve ' },
+      { projects: 'proje', github: 42 },
+      { projects: [null, 7, 'x', [], {}, { name: 5, desc: ['a'], tech: null, link: { a: 1 } }, { link: 'https://', tech: 'Go' }], github: '   ' },
+      { github: 'https://', projects: [{ name: 'Ad', link: 'http://' }, { desc: '•\n-\n1.' }] }
     ];
     junk.forEach(function (cv, i) {
       TEMPLATE_IDS.forEach(function (tpl) {
@@ -704,8 +768,8 @@
     var shared = 0;
     walk(b, function (v) { if (v && typeof v === 'object' && seen.has(v)) shared++; });
     eq(shared, 0, 'build çağrıları nesne paylaşmaz');
-    a.content[0].columns[1].stack[0].text = 'değişti';
-    eq(CVPdf.build(SAMPLE, { template: 'modern' }).content[0].columns[1].stack[0].text, 'Emre Aksoy', 'önceki çıktıyı değiştirmek sonrakini etkilemez');
+    a.content[0].stack[0].text = 'değişti';
+    eq(CVPdf.build(SAMPLE, { template: 'modern' }).content[0].stack[0].text, 'Emre Aksoy', 'önceki çıktıyı değiştirmek sonrakini etkilemez');
     var labelsBefore = JSON.stringify(CVPdf.labels('tr'));
     walk(a, function (v) { if (v && typeof v === 'object' && !Array.isArray(v)) v._margin = [1, 1, 1, 1]; });
     eq(JSON.stringify(CVPdf.labels('tr')), labelsBefore, 'çıktı değişimi etiketleri bozmaz');
@@ -725,7 +789,7 @@
       // bölünmez blok, en geniş sütunda (sade, 483pt) bile sayfanın ~%65'ini geçmemeli
       ok(findNodes(dd.content, function (n) { return n.unbreakable === true; }).every(function (u) { return textsOf(u.node).join('').length <= 3700; }), tpl + ': bölünmez bloklar sayfadan kısa');
       if (tpl === 'modern') {
-        ok(findNodes(dd.content[0].columns[0], function (n) { return n.unbreakable === true; }).every(function (u) { return textsOf(u.node).join('').length <= 1200; }), 'modern: kenar çubuğundaki bölünmez bloklar dar sütuna göre kısa');
+        ok(findNodes(modernCols(dd)[1], function (n) { return n.unbreakable === true; }).every(function (u) { return textsOf(u.node).join('').length <= 1200; }), 'modern: kenar çubuğundaki bölünmez bloklar dar sütuna göre kısa');
       }
     });
     var huge = { name: 'Uzun Özet', summary: new Array(800).join('Kelime ') };
@@ -771,6 +835,37 @@
     }
     return em * size;
   }
+  /*
+   * pdfmake DocMeasure'ın _minWidth'inin cömert tahmini: en uzun bölünmez sözcük + yatay boşluklar.
+   * Sözcükler yalnızca boşluktan bölünür (pdfmake/UAX#14 "Python,FastAPI" gibi virgüllü dizileri de
+   * bölmez); satır içi parçalar birleşik tek metin sayılır (aralarında boşluk yoksa sözcük birleşir).
+   */
+  function minWidthOf(node, st) {
+    if (typeof node === 'string') node = { text: node };
+    if (!node || typeof node !== 'object') return 0;
+    var fs = node.fontSize || st.fontSize;
+    var s = { fontSize: fs, lineHeight: st.lineHeight, bold: node.bold !== undefined ? node.bold : st.bold };
+    var m = Array.isArray(node.margin) ? node.margin : [0, 0, 0, 0];
+    var w = 0;
+    if (node.columns) {
+      node.columns.forEach(function (c) { w += typeof c.width === 'number' ? c.width : minWidthOf(c, s); });
+      w += (node.columnGap || 0) * (node.columns.length - 1);
+    } else if (node.stack) {
+      node.stack.forEach(function (c) { w = Math.max(w, minWidthOf(c, s)); });
+    } else if (node.ul) {
+      node.ul.forEach(function (c) { w = Math.max(w, minWidthOf(c, s) + 1.2 * fs); });
+    } else if (node.canvas) {
+      node.canvas.forEach(function (v) { w = Math.max(w, v.type === 'rect' ? v.x + v.w : Math.max(v.x1, v.x2)); });
+    } else if (node.image) {
+      w = node.fit ? node.fit[0] : 0;
+    } else if (node.text !== undefined) {
+      var full = nodeText(node);
+      if (node.noWrap) w = estStr(full, fs);
+      else full.split(/\s+/).forEach(function (t) { w = Math.max(w, estStr(t, fs) * (s.bold ? 1.04 : 1)); });
+    }
+    return w + m[0] + m[2];
+  }
+
   // Düğümün tahmini yüksekliği (pt); box: kullanılabilir genişlik; st: miras alınan yazı boyutu/satır yüksekliği.
   function estHeight(node, box, st) {
     if (typeof node === 'string') node = { text: node };
@@ -844,6 +939,18 @@
       });
       if (fixed + gap * (node.columns.length - 1) > inner + 0.01) problems.push('sabit sütunlar sığmıyor @ ' + path);
       var restW = (inner - fixed - gap * (node.columns.length - 1)) / Math.max(1, stars);
+      // ColumnCalculator 1. durum: '*'/'auto' sütunların en küçük genişlikleri (en uzun bölünmez sözcük)
+      // kalan alana sığmazsa '*' sütun o sözcük kadar genişler ve sütundaki TÜM satırlar sayfadan taşar.
+      // Sabit genişlikli sütunda pdfmake uzun sözcüğü satır sonunda keser; taşma olmaz.
+      var starMaxMin = 0, autoMin = 0;
+      node.columns.forEach(function (c) {
+        if (c.width === '*' || c.width === undefined) starMaxMin = Math.max(starMaxMin, minWidthOf(c, st));
+        else if (c.width === 'auto') autoMin += minWidthOf(c, st);
+      });
+      if (autoMin + starMaxMin * stars > inner - fixed - gap * (node.columns.length - 1) + 0.01) {
+        problems.push("'*'/'auto' sütunların en küçük genişliği sığmıyor (" + Math.round(autoMin + starMaxMin * stars) + ' > ' +
+          Math.round(inner - fixed - gap * (node.columns.length - 1)) + '): pdfmake sütunu sayfadan taşırır @ ' + path);
+      }
       node.columns.forEach(function (c, i) {
         var w = typeof c.width === 'number' ? c.width : c.width === 'auto' ? inner : restW;
         audit(c, w, path + '.columns[' + i + ']', { unbreakable: sub.unbreakable, inColumns: true, st: st }, problems, unbreakables);
@@ -861,7 +968,13 @@
         var vp = path + '.canvas[' + i + ']', keys = VECTOR_KEYS[v && v.type];
         if (!keys) { problems.push('bilinmeyen vektör @ ' + vp); return; }
         Object.keys(v).forEach(function (k) { if (!keys[k]) problems.push('vektör anahtarı okunmaz: ' + k + ' @ ' + vp); });
-        if (v.type === 'rect') {
+        if (v.type === 'rect' && fin(v.h) && v.h < 0) {
+          // v2 modern: 1. sayfanın kenar çubuğu zemini — akışta yüksekliği 0 olan bant (y + h ≤ 0: pdfmake
+          // tuvali 0 yükseklikte ölçer, sayfa atlatmaz); sağ kenara kadar taşması tasarım gereği (sol kenar 40pt).
+          if (!['x', 'y', 'w'].every(function (k) { return fin(v[k]); }) || v.w <= 0 || v.x < 0 || v.y + v.h > 0) problems.push('zemin bandı ölçüsü geçersiz @ ' + vp);
+          if (!v.color) problems.push('zemin bandı rengi yok @ ' + vp);
+          if (v.x + v.w > A4.width - 40 + 0.01) problems.push('zemin bandı sayfadan taşar @ ' + vp);
+        } else if (v.type === 'rect') {
           if (!['x', 'y', 'w', 'h'].every(function (k) { return fin(v[k]); }) || v.w <= 0 || v.h <= 0 || v.x < 0 || v.y < 0) problems.push('rect ölçüsü açık değil @ ' + vp);
           if (v.r !== undefined && !(fin(v.r) && v.r >= 0 && v.r <= Math.min(v.w, v.h) / 2)) problems.push('rect r geçersiz @ ' + vp);
           if (!v.color) problems.push('rect rengi yok @ ' + vp);
@@ -886,7 +999,7 @@
     }
   }
 
-  var PAGE_H = { modern: A4.height - 68, klasik: A4.height - 96, sade: A4.height - 100 };
+  var PAGE_H = { modern: A4.height - 80, klasik: A4.height - 93, sade: A4.height - 93 };
   var KEEP_SHARE = 0.65; // bölünmez blok sayfa içeriğinin en fazla bu kadarı (tahmini) olabilir
 
   function auditDoc(dd, tpl, label) {
@@ -901,11 +1014,13 @@
     if (typeof dd.background === 'function') {
       for (var p = 1; p <= 4; p++) {
         var bg = dd.background(p, { width: A4.width, height: A4.height, orientation: 'portrait' });
-        if (!bg) { problems.push('background(' + p + ') boş'); continue; }
+        // v2 modern: 1. sayfada zemin akışta (background yok); bölümsüz CV'de hiç zemin yok.
+        if (!bg) { if (p > 1 && modernCols(dd)) problems.push('background(' + p + ') boş'); continue; }
         audit(bg, A4.width, '$.background(' + p + ')', { unbreakable: false, inColumns: false, st: st }, problems, []);
       }
     }
-    for (var q = 1; q <= 3; q++) {
+    if (dd.footer(1, 3) !== null) problems.push('1. sayfada footer olmamalı (v2)');
+    for (var q = 2; q <= 3; q++) {
       var ft = dd.footer(q, 3, { width: A4.width, height: A4.height });
       if (!ft) { problems.push('footer(' + q + ',3) boş'); continue; }
       audit(ft, A4.width, '$.footer(' + q + ')', { unbreakable: false, inColumns: false, st: st }, problems, []);
@@ -944,7 +1059,15 @@
       'referans ≈2260': { refs: 'Ad Soyad — ' + words(250, 'referans') + '\nİkinci Kişi — Müdür' },
       '60 yetenek': { skills: items(60, 'Yetenek numarası ') },
       'kişisel bilgi ≈1600': { military: words(200, 'tecilli') },
-      'eğitim notu ≈2000': { edu: [{ id: 'e', school: 'Okul', program: 'Bölüm', degree: 'Lisans', start: '2010', end: '2014', note: words(250, 'notlar') }] }
+      'eğitim notu ≈2000': { edu: [{ id: 'e', school: 'Okul', program: 'Bölüm', degree: 'Lisans', start: '2010', end: '2014', note: words(250, 'notlar') }] },
+      'proje ilk maddesi ≈2550': { projects: [{ id: 'p', name: 'Proje', tech: 'Python', link: 'github.com/a/b', desc: words(425, 'süreç') + '\nikinci madde' }] },
+      'proje teknolojileri ≈1100': { projects: [{ id: 'p', name: 'Proje', tech: items(100, 'Teknoloji'), link: 'github.com/a/b', desc: 'Kısa madde.' }] },
+      'proje adı ≈1300': { projects: [{ id: 'p', name: words(130, 'Envanter'), tech: '', link: '', desc: 'Kısa madde.\nİkinci madde.' }] },
+      '12 proje': { projects: (function () {
+        var a = [];
+        for (var i = 0; i < 12; i++) a.push({ id: 'p' + i, name: 'Proje ' + i, tech: 'Go, gRPC', link: 'github.com/ali/proje-' + i, desc: words(30, 'geliştirdim') + '\n' + words(30, 'yazdım') + '\n' + words(30, 'test') });
+        return a;
+      })() }
     };
     Object.keys(cases).forEach(function (name) {
       var cv = clone(base), extra = cases[name];
@@ -966,7 +1089,7 @@
   (function () {
     ['modern', 'klasik'].forEach(function (tpl) {
       var dd = get('SAMPLE/' + tpl + '/tr/foto');
-      var dates = findNodes(dd.content, function (n) { return n.width === 'auto' && n.fontSize === 8.5; });
+      var dates = findNodes(dd.content, function (n) { return n.width === 'auto' && n.fontSize === 9; }); // v2: tarih 9pt
       ok(dates.length === 5 && dates.every(function (d) { return d.node.noWrap === true; }), tpl + ': tarih sütunları noWrap');
       // ≈300pt'lik tek kelime: tarih (≈90pt) ile yan yana 349pt'ye sığmaz → pdfmake sütunları taşırırdı
       var longRole = 'Kıdemli Uluslararasıtedarikzinciriyönetimiuzmanlığıkoordinatörlüğü';
@@ -988,20 +1111,18 @@
     });
   })();
 
-  // Modern dil satırı: etiket noWrap; ad çok uzunsa etiket alta iner, çubuk yine çizilir.
+  // Modern dil satırı (v2): çubuk yok; ad Medium, altında seviye metni. Çok uzun tek kelimeli dil adı sütundan taşmaz.
   (function () {
     var dd = get('SAMPLE/modern/en/foto');
-    var labels = findNodes(dd.content[0].columns[0], function (n) { return n.width === 'auto'; });
-    ok(labels.length === 3 && labels.every(function (l) { return l.node.noWrap === true && l.node.fontSize === 7.5; }), 'modern: dil seviyesi etiketi noWrap');
+    var side = modernCols(dd)[1];
+    ok(findNodes(side, function (n) { return n.text === 'English' && n.bold; }).length === 1 &&
+      findNodes(side, function (n) { return n.text === 'C1 (Advanced) · IELTS 7.0 (2023)'; }).length === 1, 'modern: dil adı ve altında CEFR + sınav');
+    eq(findNodes(side, function (n) { return n.width === 'auto'; }).length, 0, 'modern: dil satırında sütun yok');
     var cv = { langs: 'Brezilyaportekizcesiveyerelağızları ileri, Portekizce iyi, İşaret dili orta' };
     var d2 = CVPdf.build(cv, { template: 'modern', lang: 'en' });
     auditDoc(d2, 'modern', 'modern: uzun dil adı');
-    var side = d2.content[0].columns[0];
-    var nm = findNodes(side, function (n) { return typeof n.text === 'string' && /^Brezilya/.test(n.text); })[0];
-    ok(nm && !inAutoRow(nm), 'modern: uzun dil adı sütuna konmaz');
-    ok(allLines(d2).indexOf('Advanced') >= 0, 'modern: alta inen seviye etiketi görünür');
-    eq(findNodes(side, function (n) { return Array.isArray(n.canvas) && n.canvas.length === 5; }).length, 3, 'modern: üç dilin de çubuğu var');
-    ok(findNodes(side, function (n) { return n.text === 'Upper-intermediate'; }).some(inAutoRow), 'modern: "Upper-intermediate" kısa adla yan yana sığar');
+    ok(allLines(d2).indexOf('Advanced') >= 0 && allLines(d2).indexOf('Upper-intermediate') >= 0, 'modern: seviye metinleri görünür');
+    eq(findNodes(d2.content, function (n) { return Array.isArray(n.canvas) && n.canvas.length === 5; }).length, 0, 'modern: seviye çubuğu yok');
   })();
 
   // Fotoğraf doğrulama: pdfmake'in büyük/küçük harfe duyarlı data URL regex'i ve pdfkit'in bayt imzası.
@@ -1019,8 +1140,15 @@
     eq(photoOf('data:image/png;base64,UklGRhYAAABXRUJQVlA4'), null, 'png etiketli WebP baytları atlanır (pdfkit atardı)');
     eq(photoOf('data:image/jpeg;base64,R0lGODlhAQABAAAAACw='), null, 'jpeg etiketli GIF baytları atlanır');
     eq(photoOf('data:image/jpeg;base64,'), null, 'boş veri atlanır');
-    eq(photoOf(JPG, 'modern', 'data:image/png;base64,' + JPG_DATA), JPG, 'modern: JPEG baytlı photoRound yerine kare foto');
-    eq(photoOf(JPG, 'modern', 'data:image/PNG;base64,' + PNG_DATA), PNG, 'modern: büyük harfli PNG photoRound küçültülerek kullanılır');
+    // v2: modern, photoRound yerine cv.photo'yu SVG ile yuvarlak kırpar (3:4 ve kare fotoğrafın ikisinde de ortadan).
+    function modernSvg(photo, round) {
+      var dd = CVPdf.build({ name: 'Foto', photo: photo }, { template: 'modern', showPhoto: true, photoRound: round || '' });
+      var sv = findNodes(dd.content, function (n) { return n.svg !== undefined; });
+      return sv.length ? sv[0].node.svg : '';
+    }
+    ok(modernSvg(JPG, 'data:image/png;base64,' + JPG_DATA).indexOf('xlink:href="' + JPG + '"') >= 0, 'modern: JPEG baytlı photoRound yok sayılır, asıl foto kırpılır');
+    ok(modernSvg('data:image/JPEG;base64,' + JPG_DATA, PNG).indexOf('xlink:href="data:image/jpeg;base64,' + JPG_DATA + '"') >= 0, 'modern: büyük harfli önek SVG içinde de küçültülür');
+    eq(modernSvg('data:image/png;base64,UklGRhYAAABXRUJQVlA4', PNG), '', 'modern: basılamayan foto → SVG yok (photoRound tek başına kullanılmaz)');
     eq(CVPdf.hasContent({ photo: 'data:image/png;base64,UklGRhYAAABXRUJQVlA4' }), false, 'hasContent: basılamayacak foto içerik sayılmaz');
     eq(CVPdf.hasContent({ photo: 'https://ornek.com/a.jpg' }), false, 'hasContent: URL foto içerik sayılmaz');
     eq(CVPdf.hasContent({ photo: PNG }), true, 'hasContent: PNG foto içerik');
@@ -1036,26 +1164,29 @@
     ['tr', 'en'].forEach(function (lang) {
       var L = CVPdf.labels(lang), U = function (k) { return lang === 'en' ? L[k].toUpperCase() : trUpper(L[k]); };
       var dd = get('SAMPLE/modern/' + lang + '/foto');
-      var sideHeads = ['contact', 'skills', 'languages', 'personal', 'hobbies'].map(U);
-      var mainHeads = ['profile', 'experience', 'education', 'certs', 'refs'].map(U);
-      same(order(dd.content[0].columns[0], sideHeads.concat(mainHeads)), sideHeads, 'modern/' + lang + ': kenar çubuğu sırası');
-      same(order(dd.content[0].columns[1], sideHeads.concat(mainHeads)), mainHeads, 'modern/' + lang + ': ana sütun sırası');
+      // v2 (brief §4.5): sütunlar [ana, kenar çubuğu]; Sertifikalar kenar çubuğunda; İletişim bölümü yok (başlıkta).
+      var sideHeads = ['skills', 'languages', 'certs', 'personal', 'hobbies'].map(U);
+      var mainHeads = ['profile', 'experience', 'projects', 'education', 'refs'].map(U);
+      same(order(modernCols(dd)[1], sideHeads.concat(mainHeads)), sideHeads, 'modern/' + lang + ': kenar çubuğu sırası');
+      same(order(modernCols(dd)[0], sideHeads.concat(mainHeads)), mainHeads, 'modern/' + lang + ': ana sütun sırası');
     });
     var only = {
       summary: ['profile', 'Kısa özet.'], skills: ['skills', 'Excel'], langs: ['languages', 'İngilizce ileri'],
       certs: ['certs', 'PMP (2020)'], hobbies: ['hobbies', 'Satranç'], refs: ['refs', 'Ali Veli — Müdür'],
       birth: ['personal', '1990'], phone: ['contact', '0532 111 22 33'],
       jobs: ['experience', [{ id: 'j', role: 'Uzman', company: '', city: '', start: '', end: '', desc: '' }]],
-      edu: ['education', [{ id: 'e', school: 'Okul', program: '', degree: '', start: '', end: '', note: '' }]]
+      edu: ['education', [{ id: 'e', school: 'Okul', program: '', degree: '', start: '', end: '', note: '' }]],
+      projects: ['projects', [{ id: 'p', name: 'Stok Takip', tech: '', link: '', desc: '' }]],
+      github: ['contact', 'github.com/ali']
     };
-    var allKeys = ['contact', 'profile', 'experience', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal'];
+    var allKeys = ['contact', 'profile', 'experience', 'projects', 'education', 'skills', 'languages', 'certs', 'hobbies', 'refs', 'personal'];
     Object.keys(only).forEach(function (field) {
       TEMPLATE_IDS.forEach(function (tpl) {
         var cv = clone(EMPTY); cv[field] = only[field][1];
         var dd = CVPdf.build(cv, { template: tpl });
         var L = CVPdf.labels('tr');
         var shown = allKeys.filter(function (k) { return allLines(dd).indexOf(trUpper(L[k])) >= 0; });
-        var expect = (field === 'phone' && tpl !== 'modern') ? [] : [only[field][0]];
+        var expect = (field === 'phone' || field === 'github') ? [] : [only[field][0]]; // v2: iletişim her şablonda başlıkta
         same(shown, expect, tpl + ': yalnızca ' + field + ' → yalnızca o bölüm');
       });
     });
@@ -1063,35 +1194,393 @@
 
   // Modern: kenar çubuğu her sayfada; ana sütun ve altbilgi kenar çubuğunun sağında.
   (function () {
+    // v2: 1. sayfada zemin akışta (başlığın altından), 2.–6. sayfalarda background() tam yükseklikte.
     var dd = get('STRESS/modern/tr/foto');
-    var ok5 = true;
-    for (var p = 1; p <= 6; p++) {
+    var ok5 = dd.background(1, A4) === null;
+    for (var p = 2; p <= 6; p++) {
       var bg = dd.background(p, { width: A4.width, height: A4.height });
-      ok5 = ok5 && bg && bg.canvas.length === 1 && bg.canvas[0].x === 0 && bg.canvas[0].y === 0 && bg.canvas[0].w === 188 && bg.canvas[0].h === A4.height;
+      ok5 = ok5 && bg && bg.canvas.length === 1 && bg.canvas[0].x === MODERN_TINT_X && bg.canvas[0].y === 0 && Math.abs(bg.canvas[0].x + bg.canvas[0].w - A4.width) < 0.01 && bg.canvas[0].h === A4.height;
     }
-    ok(ok5, 'modern: kenar çubuğu 1–6. sayfaların hepsinde tam yükseklik');
-    var cols = dd.content[0].columns;
-    ok(cols[0].width === 188 && cols[1].margin[0] === 24 && dd.content[0].columnGap === 0 && dd.pageMargins[0] === 0, 'modern: ana sütun x = 188 + 24 (kenar çubuğuyla örtüşmez)');
-    same(dd.footer(2, 3).margin, [188 + 24, 13, 34, 0], 'modern: altbilgi ana sütunun kutusunda');
-    // kenar çubuğundaki metin vurgu zemininde okunur olmalı (WCAG kontrastı)
+    ok(ok5, 'modern: kenar çubuğu zemini 2–6. sayfalarda tam yükseklik, sağ kenara kadar');
+    var cols = modernCols(dd);
+    ok(cols[0].width === MODERN_MAIN_W && 40 + MODERN_MAIN_W + 22 > MODERN_TINT_X && 40 + MODERN_MAIN_W < MODERN_TINT_X, 'modern: ana sütun zeminin solunda biter, kenar çubuğu metni zeminin içinde başlar');
+    same(dd.footer(2, 3).margin, [40, 14, A4.width - 40 - MODERN_MAIN_W, 0], 'modern: altbilgi ana sütunun kutusunda');
+    // kenar çubuğundaki metin zeminin üzerinde okunur olmalı (WCAG AA 4.5:1), açık ve koyu kenar çubuğu
     function lum(hex) {
       var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
       return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     }
     function contrast(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
     CVPdf.ACCENTS.forEach(function (accent) {
-      var d = CVPdf.build(SAMPLE, { template: 'modern', accent: accent });
-      var worst = 99;
-      walk(d.content[0].columns[0], function (v) {
-        if (v && typeof v === 'object' && typeof v.color === 'string' && (v.text !== undefined || v.ul !== undefined)) {
-          var c = contrast(v.color, accent);
-          worst = Math.min(worst, c);
-        }
+      ['light', 'dark'].forEach(function (mode) {
+        var d = CVPdf.build(CVPdf.SAMPLES.yazilim, { template: 'modern', accent: accent, sidebar: mode });
+        var tint = d.background(2, A4) ? d.background(2, A4).canvas[0].color : '';
+        eq(tint.toLowerCase(), mode === 'dark' ? accent.toLowerCase() : CVPdf.mix(accent, '#ffffff', 0.9), 'modern ' + accent + '/' + mode + ': zemin rengi');
+        var worst = 99;
+        walk(modernCols(d)[1], function (v) {
+          if (v && typeof v === 'object' && typeof v.color === 'string' && (v.text !== undefined || v.ul !== undefined)) worst = Math.min(worst, contrast(v.color, tint));
+        });
+        ok(worst >= 4.5, 'modern ' + accent + '/' + mode + ': kenar çubuğu metin kontrastı ≥ 4.5 (' + worst.toFixed(2) + ')');
       });
-      ok(worst >= 3, 'modern ' + accent + ': kenar çubuğu metin kontrastı ≥ 3 (' + worst.toFixed(2) + ')');
       var main = [];
-      walk(d.content[0].columns[1], function (v) { if (v && typeof v === 'object' && typeof v.color === 'string' && v.text !== undefined) main.push(contrast(v.color, '#ffffff')); });
+      walk(modernCols(CVPdf.build(SAMPLE, { template: 'modern', accent: accent }))[0], function (v) { if (v && typeof v === 'object' && typeof v.color === 'string' && v.text !== undefined) main.push(contrast(v.color, '#ffffff')); });
       ok(Math.min.apply(null, main) >= 4.5, 'modern ' + accent + ': ana sütun metin kontrastı ≥ 4.5');
+    });
+  })();
+
+  /* ============================================ projeler ve GitHub (SPEC v2 §5) */
+
+  print('# projeler ve GitHub');
+  (function () {
+    var ACC = '#7A2E3A';
+    function U(lang, k) { var L = CVPdf.labels(lang); return lang === 'en' ? L[k].toUpperCase() : trUpper(L[k]); }
+    function linksOf(x) {
+      var out = [];
+      walk(x, function (v) { if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.link === 'string') out.push(v); });
+      return out;
+    }
+    function headsIn(dd, keys, lang) {
+      var hs = keys.map(function (k) { return U(lang, k); }), seen = [];
+      walk(dd.content, function (v) { if (v && typeof v === 'object' && hs.indexOf(v.text) >= 0) seen.push(v.text); });
+      return seen;
+    }
+
+    // Örnek CV: her şablon × dil
+    TEMPLATE_IDS.forEach(function (tpl) {
+      ['tr', 'en'].forEach(function (lang) {
+        var key = 'proje/' + tpl + '/' + lang;
+        var dd = CVPdf.build(SAMPLE, { template: tpl, lang: lang, accent: ACC });
+        same(headsIn(dd, ['experience', 'projects', 'education'], lang), [U(lang, 'experience'), U(lang, 'projects'), U(lang, 'education')],
+          key + ': Projeler bir kez, İş Deneyimi ile Eğitim arasında');
+        var ph = findNodes(dd.content, function (n) { return n.text === U(lang, 'projects'); });
+        if (ph.length) {
+          var styleRef = findNodes(dd.content, function (n) { return n.text === U(lang, 'experience'); })[0].node;
+          ok(ph[0].node.fontSize === styleRef.fontSize && ph[0].node.color === styleRef.color && ph[0].node.bold === styleRef.bold &&
+            ph[0].node.characterSpacing === styleRef.characterSpacing, key + ': Projeler başlığı İş Deneyimi başlığıyla aynı stilde');
+        }
+
+        SAMPLE.projects.forEach(function (pr) {
+          var bullets = CVParse.splitLines(pr.desc);
+          var names = findNodes(dd.content, function (n) { return n.text === pr.name; });
+          eq(names.length, 1, key + ': "' + pr.name + '" bir kez');
+          if (!names.length) return;
+          var nm = names[0].node;
+          ok(nm.bold === true && nm.color === INK && nm.fontSize === 10.5, key + ': proje adı iş ünvanı stilinde (kalın, INK, v2: 10.5)');
+          var u = nearestUnbreakable(names[0].anc), t = u ? textsOf(u) : [];
+          ok(t.indexOf(bullets[0]) >= 0 && t.indexOf(bullets[1]) < 0, key + ': ' + pr.name + ' — ad + alt satır + ilk madde bölünmez, ikinci madde dışarıda');
+          ok(t.indexOf(pr.link) >= 0 && t.indexOf(pr.tech) >= 0, key + ': alt satır adla aynı bölünmez blokta');
+          var all = textsOf(dd.content);
+          ok(bullets.every(function (b) { return all.indexOf(b) >= 0; }), key + ': tüm proje maddeleri var');
+
+          var subs = findNodes(dd.content, function (n) { return Array.isArray(n.text) && nodeText(n) === pr.tech + ' · ' + pr.link; });
+          eq(subs.length, 1, key + ': alt satır "teknolojiler · bağlantı"');
+          if (!subs.length) return;
+          var sn = subs[0].node;
+          eq(sn.color, tpl === 'modern' ? CVPdf.mix(ACC, INK, 0.3) : MUTED, key + ': alt satır rengi (modern vurgu tonu, diğerleri MUTED)');
+          eq(sn.fontSize, tpl === 'modern' ? 9 : 9.5, key + ': alt satır 9pt (modern) / 9.5pt (v2 klasik, sade)');
+          same(sn.text.map(function (x) { return x.text; }), [pr.tech, ' · ', pr.link], key + ': alt satır parçaları');
+          eq(sn.text[2].link, 'https://' + pr.link, key + ': bağlantı https:// ile tıklanabilir, protokolsüz görünür');
+          ok(sn.text[0].link === undefined && sn.text[1].link === undefined, key + ': yalnızca bağlantı parçası tıklanabilir');
+          ok(sn.text.every(function (x) { return x.color === undefined; }), key + ': parçalar satır rengini miras alır');
+          ok(nearestUnbreakable(names[0].anc) === nearestUnbreakable(subs[0].anc), key + ': alt satır ve ad aynı blokta');
+        });
+        // Bölüm madde işaretleri iş deneyimiyle aynı
+        var pBul = findNodes(dd.content, function (n) { return Array.isArray(n.ul) && n.ul.some(function (b) { return b.text === CVParse.splitLines(SAMPLE.projects[0].desc)[0]; }); });
+        var jBul = findNodes(dd.content, function (n) { return Array.isArray(n.ul) && n.ul.some(function (b) { return b.text === CVParse.splitLines(SAMPLE.jobs[0].desc)[0]; }); });
+        ok(pBul.length === 1 && jBul.length === 1 && pBul[0].node.fontSize === jBul[0].node.fontSize && pBul[0].node.markerColor === jBul[0].node.markerColor,
+          key + ': proje maddeleri iş maddeleriyle aynı stilde');
+
+        // GitHub iletişim girdisi: Web'den hemen sonra, https:// bağlantılı, protokolsüz görünür
+        var links = linksOf(dd.content).map(function (n) { return n.link; });
+        var wi = links.indexOf('https://linkedin.com/in/emre-aksoy-ornek'), gi = links.indexOf('https://github.com/emreaksoy-ornek');
+        ok(wi >= 0 && gi === wi + 1, key + ": GitHub bağlantısı Web'den hemen sonra");
+        var gh = linksOf(dd.content).filter(function (n) { return n.link === 'https://github.com/emreaksoy-ornek'; });
+        ok(gh.length === 1 && gh[0].text === 'github.com/emreaksoy-ornek', key + ': GitHub değeri protokolsüz görünür');
+        ok(JSON.stringify(dd).indexOf('GİTHUB') < 0, key + ': "GİTHUB" (Türkçe büyük harf) yok');
+        // v2: her şablonda (modern dahil) iletişim başlıkta; GitHub iletişim satırının sonunda.
+        var line = findNodes(dd.content, function (n) { return Array.isArray(n.text) && n.text.some(function (x) { return x.link === 'mailto:emre.aksoy@example.com'; }); });
+        ok(line.length === 1 && line[0].node.text[line[0].node.text.length - 1].link === 'https://github.com/emreaksoy-ornek', key + ': GitHub başlıktaki iletişim satırının sonunda');
+        if (tpl === 'modern') eq(findNodes(modernCols(dd)[1], function (n) { return typeof n.link === 'string'; }).length, 0, key + ': kenar çubuğunda iletişim yok');
+        auditDoc(dd, tpl, key);
+      });
+    });
+
+    // Boş projeler atlanır; bölüm yalnızca basılacak proje varsa
+    var EMPTY_PROJ = { name: 'Boş Proje', projects: [
+      { id: 'a', name: '', tech: 'Python', link: 'github.com/bos/depo', desc: '' },
+      { id: 'b', name: '  ', tech: '', link: '', desc: ' \n • \n' },
+      { id: 'c' }, null, 'Proje', 42, []
+    ] };
+    TEMPLATE_IDS.forEach(function (tpl) {
+      ['tr', 'en'].forEach(function (lang) {
+        var key = 'boş proje/' + tpl + '/' + lang;
+        var dd = CVPdf.build(EMPTY_PROJ, { template: tpl, lang: lang });
+        validateTree(dd, key, true);
+        auditDoc(dd, tpl, key);
+        var lines = allLines(dd);
+        ok(lines.indexOf(U('tr', 'projects')) < 0 && lines.indexOf(U('en', 'projects')) < 0, key + ': Projeler başlığı yok');
+        ok(JSON.stringify(dd).indexOf('github.com/bos') < 0, key + ': adsız/açıklamasız projenin bağlantısı basılmaz');
+        same(lines.filter(function (l) { return l.trim() !== ''; }), ['Boş Proje'], key + ': yalnızca isim görünür');
+      });
+    });
+    // hasContent, iş/eğitimde olduğu gibi CVParse'a bağlı değil: yalnızca "•" içeren açıklama (id 'b') ham metin
+    // olarak dolu sayılır; build bunu basmaz. Bu küçük fark bilerek kabul edildi.
+    eq(CVPdf.hasContent({ projects: EMPTY_PROJ.projects.filter(function (x) { return !(x && x.id === 'b'); }) }), false, 'hasContent: yalnızca boş projeler içerik değil');
+
+    // Karışık: geçerli projeler sırasıyla kalır, boşlar düşer
+    (function () {
+      var cv = { projects: [
+        { id: '1', name: 'Birinci', tech: '', link: '', desc: '' },
+        { id: '2', name: '', tech: 'Rust', link: '', desc: '' },
+        { id: '3', name: '', tech: 'Go', link: 'github.com/ali/cli', desc: '• Komut satırı aracı yazdım.\n- Testlerini yazdım.' },
+        { id: '4', name: 'Dördüncü', tech: 'Swift', link: '', desc: '' }
+      ] };
+      TEMPLATE_IDS.forEach(function (tpl) {
+        var dd = CVPdf.build(cv, { template: tpl });
+        auditDoc(dd, tpl, 'karışık proje/' + tpl);
+        var lines = allLines(dd).filter(function (l) { return l.trim() !== ''; });
+        ok(lines.indexOf('Birinci') >= 0 && lines.indexOf('Dördüncü') >= 0 && lines.indexOf('Birinci') < lines.indexOf('Dördüncü'), tpl + ': projeler veri sırasında');
+        ok(lines.indexOf('Rust') < 0, tpl + ': yalnızca teknolojisi olan proje atlanır');
+        ok(lines.indexOf('Go · github.com/ali/cli') >= 0, tpl + ': adsız proje alt satırla başlar');
+        var texts = textsOf(dd.content);
+        ok(texts.indexOf('Komut satırı aracı yazdım.') >= 0 && texts.indexOf('Testlerini yazdım.') >= 0, tpl + ': madde işaretleri temizlenir');
+        ok(lines.indexOf('Swift') >= 0, tpl + ': yalnızca teknoloji alt satırı düz metin');
+        eq(findNodes(dd.content, function (n) { return n.text === 'Swift'; })[0].node.link, undefined, tpl + ': bağlantısız alt satır tıklanamaz');
+        var head = findNodes(dd.content, function (n) { return n.text === 'PROJELER'; })[0];
+        var u = head && nearestUnbreakable(head.anc);
+        ok(u && textsOf(u).indexOf('Birinci') >= 0, tpl + ': başlık ilk projeyle bölünmez');
+        // adsız proje: alt satır + ilk madde birlikte, ikinci madde dışarıda
+        var sub = findNodes(dd.content, function (n) { return Array.isArray(n.text) && nodeText(n) === 'Go · github.com/ali/cli'; })[0];
+        var su = sub && nearestUnbreakable(sub.anc);
+        ok(su && textsOf(su).indexOf('Komut satırı aracı yazdım.') >= 0 && textsOf(su).indexOf('Testlerini yazdım.') < 0, tpl + ': adsız projenin alt satırı ilk maddesiyle bölünmez');
+        eq(findNodes(dd.content, function (n) { return n.text === 'Dördüncü'; })[0].node.bold, true, tpl + ': yalnız adlı proje kalın başlık');
+      });
+    })();
+
+    // Bağlantı biçimleri: protokol tekrarlanmaz, boşluklar silinir, yalnızca bağlantı da olur
+    (function () {
+      function sub(link, tpl) {
+        var dd = CVPdf.build({ projects: [{ id: 'p', name: 'P', tech: '', link: link, desc: '' }] }, { template: tpl || 'modern' });
+        var n = linksOf(dd.content);
+        return n.length ? { text: n[0].text, link: n[0].link, count: n.length } : null;
+      }
+      same(sub('https://github.com/ali/repo/'), { text: 'github.com/ali/repo', link: 'https://github.com/ali/repo/', count: 1 }, 'proje: https:// iki kez önek almaz, görünümde yok');
+      same(sub('HTTP://Ornek.com/x'), { text: 'Ornek.com/x', link: 'HTTP://Ornek.com/x', count: 1 }, 'proje: büyük harfli protokol');
+      same(sub('github.com/ ali / repo'), { text: 'github.com/ali/repo', link: 'https://github.com/ali/repo', count: 1 }, 'proje: dikte boşlukları silinir');
+      eq(sub('https://'), null, 'proje: yalnızca protokol → bağlantı yok');
+      eq(sub('   '), null, 'proje: boş bağlantı yok');
+      TEMPLATE_IDS.forEach(function (tpl) {
+        var dd = CVPdf.build({ projects: [{ id: 'p', name: 'P', tech: '', link: 'ornek.dev', desc: '' }] }, { template: tpl });
+        var s = findNodes(dd.content, function (n) { return Array.isArray(n.text) && nodeText(n) === 'ornek.dev'; });
+        ok(s.length === 1 && s[0].node.text.length === 1 && s[0].node.text[0].link === 'https://ornek.dev', tpl + ': yalnızca bağlantı → ayraçsız tek parça');
+      });
+      var sade = CVPdf.build(SAMPLE, { template: 'sade' });
+      ok(allLines(sade).indexOf(SAMPLE.projects[0].tech + ' · ' + SAMPLE.projects[0].link) >= 0, 'sade: proje alt satırında " · " (tarih ayracı " | " yok)');
+    })();
+
+    // GitHub alanı biçimleri
+    (function () {
+      function gh(v, tpl, lang) {
+        var dd = CVPdf.build({ name: 'G', github: v }, { template: tpl || 'modern', lang: lang || 'tr' });
+        var n = linksOf(dd.content);
+        return n.length ? { text: n[0].text, link: n[0].link } : null;
+      }
+      same(gh('emreaksoy'), { text: 'github.com/emreaksoy', link: 'https://github.com/emreaksoy' }, 'github: yalnızca kullanıcı adı tamamlanır');
+      same(gh('@emre-aksoy'), { text: 'github.com/emre-aksoy', link: 'https://github.com/emre-aksoy' }, 'github: @kullanıcı tamamlanır');
+      same(gh('https://github.com/ali/'), { text: 'github.com/ali', link: 'https://github.com/ali/' }, 'github: protokollü değer iki kez önek almaz');
+      same(gh('github.com / ali'), { text: 'github.com/ali', link: 'https://github.com/ali' }, 'github: dikte boşlukları silinir');
+      same(gh('gitlab.com/ali'), { text: 'gitlab.com/ali', link: 'https://gitlab.com/ali' }, 'github: alan adlı değer olduğu gibi');
+      eq(gh('https://'), null, 'github: yalnızca protokol → girdi yok');
+      TEMPLATE_IDS.forEach(function (tpl) {
+        ['tr', 'en'].forEach(function (lang) {
+          var dd = CVPdf.build({ github: 'github.com/ali' }, { template: tpl, lang: lang });
+          auditDoc(dd, tpl, 'yalnız github/' + tpl + '/' + lang);
+          eq(linksOf(dd.content).length, 1, tpl + '/' + lang + ': yalnızca GitHub → tek bağlantı');
+          ok(allLines(dd).indexOf('github.com/ali') >= 0 && allLines(dd).indexOf(U(lang, 'contact')) < 0, tpl + '/' + lang + ': GitHub başlıkta, İletişim bölümü yok');
+        });
+      });
+      var none = CVPdf.build({ name: 'G', github: 'https://' }, { template: 'modern' });
+      ok(allLines(none).indexOf('GITHUB') < 0 && allLines(none).indexOf('İLETİŞİM') < 0, 'modern: boş GitHub → etiket ve İletişim bölümü yok');
+    })();
+
+    // Stres: tüm proje maddeleri, bloklar sınırda
+    TEMPLATE_IDS.forEach(function (tpl) {
+      var dd = get('STRESS/' + tpl + '/tr/foto');
+      var texts = textsOf(dd.content), n = 0;
+      STRESS.projects.forEach(function (pr) { CVParse.splitLines(pr.desc).forEach(function (b) { if (texts.indexOf(b) >= 0) n++; }); });
+      eq(n, 24, tpl + ': stres 6 proje × 4 madde');
+      ok(STRESS.projects.every(function (pr) { return texts.indexOf(pr.name) >= 0; }), tpl + ': stres proje adlarının hepsi');
+    });
+  })();
+
+  /* ================================ projeler ve GitHub: çekişmeli inceleme (regresyonlar) */
+
+  print('# projeler ve GitHub — inceleme');
+  (function () {
+    function U(lang, k) { var L = CVPdf.labels(lang); return lang === 'en' ? L[k].toUpperCase() : trUpper(L[k]); }
+    function linksOf(x) {
+      var out = [];
+      walk(x, function (v) { if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.link === 'string') out.push(v); });
+      return out;
+    }
+    function withProjects(projects, extra) {
+      var cv = clone(SAMPLE);
+      cv.projects = projects;
+      for (var k in extra || {}) cv[k] = extra[k];
+      return cv;
+    }
+    function each(fn) { TEMPLATE_IDS.forEach(function (tpl) { ['tr', 'en'].forEach(function (lang) { fn(tpl, lang, tpl + '/' + lang); }); }); }
+    var SPACED = ['Python', 'Pandas', 'PowerBI', 'FastAPI', 'PostgreSQL', 'Redis', 'Kafka', 'Docker', 'Kubernetes', 'Terraform', 'GitHubActions'];
+    var LONG_WORD = 'Gerçekzamanlıenvantervesiparişeşleştirmemotoruikincisürümdenemesiçokuzunad';
+    var LONG_SEG = 'github.com/ali/' + new Array(9).join('envantermotoru');
+
+    // HATA 1 — pdfmake ColumnCalculator 1. durum: '*' sütundaki tek bir uzun bölünmez sözcük (boşluksuz
+    // virgüllü teknoloji listesi, tek sözcüklük ad, uzun bağlantı) sütunu o sözcük kadar genişletiyor ve
+    // modern ana sütunun / klasik bölüm satırının TÜM satırları sayfanın sağından taşıyordu (gerçek
+    // pdfmake 0.2.10 düzeninde ölçüldü: modern 23 satır, sağ kenar ≈627pt > 561pt). Sabit genişlikli sütunda
+    // pdfmake sözcüğü satır sonunda keser.
+    each(function (tpl, lang, key) {
+      var cases = {
+        'boşluksuz teknoloji listesi': withProjects([{ id: 'p', name: 'Depo Aracı', tech: SPACED.join(','), link: 'github.com/ali/depo', desc: 'Madde.' }]),
+        'tek sözcük proje adı': withProjects([{ id: 'p', name: LONG_WORD, tech: 'Go', link: '', desc: 'Madde.' }]),
+        'uzun bağlantı parçası': withProjects([{ id: 'p', name: 'Bağlantı', tech: '', link: LONG_SEG, desc: 'Madde.' }]),
+        'tek sözcük teknoloji': withProjects([{ id: 'p', name: 'P', tech: LONG_WORD.toLowerCase(), link: '', desc: '' }]),
+        // klasik: fotoğraflı başlıkta iletişim satırı (GitHub en sonda) '*' sütundaydı
+        'uzun GitHub adresi + foto': withProjects([], { photo: JPG, github: 'github.com/' + new Array(8).join('cokuzunkullaniciadi') })
+      };
+      Object.keys(cases).forEach(function (name) {
+        var dd = CVPdf.build(cases[name], { template: tpl, lang: lang });
+        auditDoc(dd, tpl, 'uzun sözcük: ' + name + '/' + key);
+        validateTree(dd, 'uzun sözcük: ' + name + '/' + key, true);
+      });
+    });
+    // Metin sütunları sabit genişlikli; toplamları kullanılabilir genişliğe eşit (görünüm değişmez).
+    (function () {
+      var m = modernCols(CVPdf.build(SAMPLE, { template: 'modern' }));
+      ok(typeof m[0].width === 'number' && typeof m[1].width === 'number' && Math.abs(m[0].width + m[1].width + 22 - (A4.width - 80)) < 0.01, 'modern: iki sütun da sabit genişlikli (v2: 310 + 22 + 183.28)');
+      var mp = clone(SAMPLE); mp.photo = JPG;
+      var mh = CVPdf.build(mp, { template: 'modern' }).content[0];
+      ok(mh.columns && mh.columns.every(function (c) { return typeof c.width === 'number'; }) && Math.abs(mh.columns[0].width + mh.columns[1].width + mh.columnGap - (A4.width - 80)) < 0.01, 'modern: fotoğraflı başlık sabit genişlikli');
+      var k = CVPdf.build(clone(SAMPLE), { template: 'klasik', showPhoto: true });
+      var rows = findNodes(k.content, function (n) { return Array.isArray(n.columns); });
+      ok(rows.length > 0 && rows.every(function (r) {
+        return r.node.columns.every(function (c) { return typeof c.width === 'number'; }) ||
+          r.node.columns.some(function (c) { return c.width === 'auto'; }); // ünvan/tarih satırı: sideBySide korumalı
+      }), "klasik: bölüm satırlarında '*' sütun yok (yalnızca korumalı ünvan/tarih satırı)");
+      var kp = CVPdf.build(withProjects([], { photo: JPG }), { template: 'klasik' }).content[0];
+      ok(kp.columns && kp.columns.every(function (c) { return typeof c.width === 'number'; }) &&
+        Math.abs(kp.columns[0].width + kp.columns[1].width + kp.columnGap - (A4.width - 102)) < 0.01, 'klasik: fotoğraflı başlık sabit genişlikli (v2 kenar 51)');
+    })();
+
+    // HATA 2 — boşluksuz virgüllü teknoloji listesi ("Python,FastAPI") satır sonunda sözcük ortasından
+    // kesiliyordu (UAX#14 virgül+harf arasında kırmaz). Virgülden sonra tek boşluk; ondalık "2,7" korunur.
+    (function () {
+      function techLine(tech, tpl) {
+        var dd = CVPdf.build({ projects: [{ id: 'p', name: 'P', tech: tech, link: '', desc: '' }] }, { template: tpl || 'modern' });
+        // v2: Türkçedeki "Referanslar talep üzerine iletilir." kapanış satırı alt satır sayılmaz.
+        var l = allLines(dd).filter(function (x) { return x !== 'P' && x.trim() !== '' && x !== 'PROJELER' && x !== CVPdf.labels('tr').refsLine; });
+        return l.length ? l[0] : null;
+      }
+      eq(techLine(SPACED.join(',')), SPACED.join(', '), 'teknoloji: virgülden sonra boşluk eklenir');
+      eq(techLine('Python ,FastAPI ,  PostgreSQL'), 'Python, FastAPI, PostgreSQL', 'teknoloji: virgül çevresi düzenlenir');
+      eq(techLine('Vue 2,7, Nuxt'), 'Vue 2,7, Nuxt', 'teknoloji: ondalık virgül korunur');
+      eq(techLine(',Go,,Rust,'), 'Go, Rust', 'teknoloji: boş öğeler ve uçtaki virgüller atılır');
+      eq(techLine(' , ,'), null, 'teknoloji: yalnızca virgül → alt satır yok');
+      eq(techLine('C#,.NET,C++'), 'C#, .NET, C++', 'teknoloji: noktalı/simgeli adlar');
+      TEMPLATE_IDS.forEach(function (tpl) {
+        eq(techLine('Go,gRPC', tpl), 'Go, gRPC', tpl + ': teknoloji düzeni her şablonda');
+      });
+      // SAMPLE ve zaten düzgün listeler aynen kalır
+      SAMPLE.projects.forEach(function (pr) { eq(techLine(pr.tech), pr.tech, 'teknoloji: düzgün liste değişmez (' + pr.tech + ')'); });
+    })();
+
+    // HATA 3 — Web ve GitHub aynı adresse iletişimde iki kez görünüyordu. GitHub girdisi kalır (etiketi daha
+    // açıklayıcı), Web düşer. Karşılaştırma protokol, "www.", sondaki "/" ve büyük/küçük harften bağımsız.
+    each(function (tpl, lang, key) {
+      [
+        { web: 'https://www.github.com/ali/', github: 'github.com/ali' },
+        { web: 'GitHub.com/Ali', github: 'ali' },
+        { web: 'http://github.com/ali', github: '@ali' }
+      ].forEach(function (c, i) {
+        var dd = CVPdf.build({ name: 'A', web: c.web, github: c.github }, { template: tpl, lang: lang });
+        var links = linksOf(dd.content).map(function (n) { return n.link; });
+        same(links, ['https://github.com/ali'], key + ': aynı Web/GitHub tek girdi (' + i + ')');
+      });
+      var both = CVPdf.build({ name: 'A', web: 'ali.dev', github: 'github.com/ali' }, { template: tpl, lang: lang });
+      same(linksOf(both.content).map(function (n) { return n.link; }), ['https://ali.dev', 'https://github.com/ali'], key + ': farklı Web ve GitHub ikisi de, Web önce');
+      var other = CVPdf.build({ name: 'A', web: 'github.com/ali/proje', github: 'github.com/ali' }, { template: tpl, lang: lang });
+      eq(linksOf(other.content).length, 2, key + ': depo bağlantısı profil adresiyle aynı sayılmaz');
+      // GitHub alanına GitHub dışı bir adres (ör. LinkedIn) yazılmış ve Web ile aynıysa "GITHUB" etiketi yanlış
+      // olurdu: bu durumda Web girdisi kalır.
+      var li = CVPdf.build({ name: 'A', web: 'linkedin.com/in/ali', github: 'https://www.linkedin.com/in/ali/' }, { template: tpl, lang: lang });
+      same(linksOf(li.content).map(function (n) { return n.link; }), ['https://linkedin.com/in/ali'], key + ': GitHub dışı yinelenen adres Web olarak bir kez');
+      ok(linksOf(li.content)[0].text === 'linkedin.com/in/ali', key + ': GitHub dışı adres Web değeriyle görünür');
+    });
+
+    // HATA 4 — hasContent, build'in hiçbir şey basmayacağı bağlantı değerlerini ("https://", "@") içerik
+    // sayıyordu: önizleme örnek CV yerine boş sayfa gösterirdi.
+    eq(CVPdf.hasContent({ github: 'https://' }), false, 'hasContent: yalnızca protokollü GitHub içerik değil');
+    eq(CVPdf.hasContent({ github: ' HTTP:// ' }), false, 'hasContent: büyük harfli protokol + boşluk');
+    eq(CVPdf.hasContent({ web: 'https:///' }), false, 'hasContent: yalnızca protokollü Web içerik değil');
+    eq(CVPdf.hasContent({ github: '@' }), false, 'hasContent: yalnızca "@" içerik değil');
+    eq(CVPdf.hasContent({ github: '@ali' }), true, 'hasContent: @kullanıcı içerik');
+    eq(CVPdf.hasContent({ github: 'https://github.com/ali' }), true, 'hasContent: protokollü GitHub içerik');
+    eq(CVPdf.hasContent({ web: 'ali.dev' }), true, 'hasContent: Web içerik');
+    each(function (tpl, lang, key) {
+      ['https://', '@', ' @ '].forEach(function (v) {
+        var dd = CVPdf.build({ github: v }, { template: tpl, lang: lang });
+        eq(linksOf(dd.content).length, 0, key + ': GitHub ' + JSON.stringify(v) + ' → bağlantı yok');
+        same(allLines(dd).filter(function (l) { return l.trim() !== ''; }), [], key + ': GitHub ' + JSON.stringify(v) + ' → boş sayfa (hasContent ile tutarlı)');
+      });
+    });
+
+    // HATA 5 — iki kez yapıştırılmış protokol ("https://https://github.com/ali"): bağlantı "https://https://…"
+    // (ana makine adı "https") olarak bozuk, görünen metin "https://github.com/ali" idi.
+    each(function (tpl, lang, key) {
+      var dd = CVPdf.build(withProjects([{ id: 'p', name: 'Çift', tech: '', link: 'HTTPS://https://github.com/ali/cift/', desc: '' }],
+        { web: 'http://https://ali.dev', github: 'https://https://github.com/ali' }), { template: tpl, lang: lang });
+      var l = linksOf(dd.content).map(function (n) { return n.text + ' → ' + n.link; });
+      ok(l.indexOf('github.com/ali/cift → https://github.com/ali/cift/') >= 0, key + ': proje bağlantısında çift protokol tekilleşir');
+      ok(l.indexOf('github.com/ali → https://github.com/ali') >= 0, key + ': GitHub çift protokol tekilleşir');
+      ok(l.indexOf('ali.dev → https://ali.dev') >= 0, key + ': Web çift protokol: sonuncusu geçerli');
+      ok(JSON.stringify(dd).search(/https?:\/\/https?:/i) < 0, key + ': hiçbir yerde çift protokol yok');
+    });
+
+    // "www." bağlantılar: protokol gizlenir, "www." kişinin yazdığı gibi kalır; bağlantı tıklanabilir.
+    each(function (tpl, lang, key) {
+      var dd = CVPdf.build(withProjects([{ id: 'p', name: 'W', tech: 'JS', link: 'https://www.ornek.com/proje/', desc: 'Madde.' }],
+        { github: 'https://www.github.com/ali/' }), { template: tpl, lang: lang });
+      var l = linksOf(dd.content);
+      ok(l.some(function (n) { return n.text === 'www.ornek.com/proje' && n.link === 'https://www.ornek.com/proje/'; }), key + ': https://www. proje bağlantısı');
+      ok(l.some(function (n) { return n.text === 'www.github.com/ali' && n.link === 'https://www.github.com/ali/'; }), key + ': https://www. GitHub');
+      ok(JSON.stringify(dd).indexOf('https://https://') < 0 && JSON.stringify(dd).indexOf('"https://www.github.com/ali/"') >= 0, key + ': protokol iki kez eklenmez');
+      auditDoc(dd, tpl, 'www/' + key);
+    });
+
+    // Yalnızca adı olan proje, 8 uzun maddeli proje, 6 iş + projeler: her şablon × dil
+    each(function (tpl, lang, key) {
+      var dd = CVPdf.build({ name: 'A', projects: [{ id: 'p', name: 'Yalnız Ad', tech: '', link: '', desc: '' }] }, { template: tpl, lang: lang });
+      auditDoc(dd, tpl, 'yalnız ad/' + key);
+      // v2: Türkçede referans yoksa kapanış satırı "Referanslar talep üzerine iletilir." (İngilizcede yok).
+      same(allLines(dd).filter(function (l) { return l.trim() !== ''; }), ['A', U(lang, 'projects'), 'Yalnız Ad'].concat(lang === 'tr' ? ['Referanslar talep üzerine iletilir.'] : []), key + ': yalnızca adlı proje → başlık + ad');
+      eq(findNodes(dd.content, function (n) { return n.ul !== undefined; }).length, 0, key + ': yalnızca adlı projede madde listesi yok');
+
+      var bullets = [];
+      for (var i = 0; i < 8; i++) bullets.push('Madde ' + (i + 1) + ': ' + new Array(15).join('gerçekzamanlı ') + 'sistemini tasarlayıp canlıya aldım.');
+      var d8 = CVPdf.build(withProjects([{ id: 'p', name: 'Sekiz Maddeli', tech: 'Go, Kafka', link: 'github.com/ali/sekiz', desc: bullets.join('\n') }]), { template: tpl, lang: lang });
+      auditDoc(d8, tpl, '8 madde/' + key);
+      var t8 = textsOf(d8.content);
+      ok(bullets.every(function (b) { return t8.indexOf(b) >= 0; }), key + ': 8 maddenin hepsi');
+      var nm = findNodes(d8.content, function (n) { return n.text === 'Sekiz Maddeli'; })[0];
+      var u = nm && nearestUnbreakable(nm.anc);
+      ok(u && textsOf(u).indexOf(bullets[0]) >= 0 && bullets.slice(1).every(function (b) { return textsOf(u).indexOf(b) < 0; }), key + ': 8 maddeden yalnızca ilki adla bölünmez blokta');
+
+      var jobs = [];
+      for (var j = 0; j < 6; j++) jobs.push({ id: 'j' + j, role: 'Geliştirici ' + j, company: 'Şirket ' + j, city: 'Ankara', start: '20' + (10 + j), end: '20' + (11 + j), desc: 'Bir.\nİki.\nÜç.' });
+      var d6 = CVPdf.build(withProjects(SAMPLE.projects, { jobs: jobs }), { template: tpl, lang: lang });
+      auditDoc(d6, tpl, '6 iş + projeler/' + key);
+      var heads = allLines(d6).filter(function (x) { return [U(lang, 'experience'), U(lang, 'projects'), U(lang, 'education')].indexOf(x) >= 0; });
+      same(heads, [U(lang, 'experience'), U(lang, 'projects'), U(lang, 'education')], key + ': 6 iş + projeler bölüm sırası');
     });
   })();
 
