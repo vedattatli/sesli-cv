@@ -732,8 +732,10 @@ var AICV = {
   // prev field empty → the AI's value (a number said in an answer that the scrubber missed)
   var ai2 = Object.assign({}, AICV, { phone: '0532 999 88 77', email: 'Ayse@Gmail.com', refs: ['Veli Bey'], birth: '1991', military: 'Muaf', marital: 'Bekar' });
   var c2 = AI.fromAI(ai2, { phone: '', email: '   ', photo: 5 }, 'tr');
-  check('fromAI takes AI values when prev is empty', [c2.phone, c2.email, c2.refs, c2.birth, c2.military, c2.marital],
-    ['0532 999 88 77', 'ayse@gmail.com', 'Veli Bey', '1991', 'Muaf', 'Bekar']);
+  check('fromAI takes AI values when prev is empty', [c2.phone, c2.email, c2.refs, c2.birth, c2.military],
+    ['0532 999 88 77', 'ayse@gmail.com', 'Veli Bey', '1991', 'Muaf']);
+  // Medeni durum yalnızca Kişisel bilgiler kartından gelir (canlıda model 'MISSING_PLACEHOLDER_FIX' yazdı).
+  check('fromAI never takes marital from the AI', [c2.marital, AI.fromAI(ai2, { marital: 'Evli' }).marital], ['', 'Evli']);
   check('fromAI photo must be a string', c2.photo, '');
   check('fromAI prev wins over AI', AI.fromAI(ai2, { phone: '0500 000 00 00' }).phone, '0500 000 00 00');
 })();

@@ -1373,6 +1373,35 @@ class EvidenceTests(Base):
         self.assertEqual((body["missing"], body["confirm"]), ([], []))
 
 
+class PlaceholderTests(Base):
+    def test_placeholders_never_reach_the_cv(self):
+        out = full_cv(marital="MISSING_PLACEHOLDER_FIX", military="NOT_PROVIDED", birth="[Doğum yılı]",
+                      city="N/A", title="Yazılım Mühendisi", skills=["Python", "TBD", "[X]"],
+                      jobs=[{"company": "Şirket Adı placeholder", "role": "Geliştirici", "city": "-", "start": "2021",
+                             "end": "", "bullets": ["API geliştirdim.", "XXX"]}])
+        for op in ("finalize", "edit", "translate"):
+            data = {"cv": out, "reply": "ok"}
+            payload = {"op": op, "cv": full_cv(), "instruction": "x"}
+            status, body = api.handle(payload, {}, "", client=FakeClient(resp(data)))
+            cv = body["cv"]
+            self.assertEqual((cv["marital"], cv["military"], cv["birth"], cv["city"]), ("", "", "", ""), op)
+            self.assertEqual(cv["title"], "Yazılım Mühendisi")
+            self.assertEqual(cv["skills"], ["Python"])
+            self.assertEqual(cv["jobs"][0]["company"], "")
+            self.assertEqual(cv["jobs"][0]["city"], "")
+            self.assertEqual(cv["jobs"][0]["bullets"], ["API geliştirdim."])
+
+    def test_model_never_sets_marital(self):
+        status, body = api.handle({"op": "finalize", "cv": full_cv()}, {}, "",
+                                  client=FakeClient(resp({"cv": full_cv(marital="Evli")})))
+        self.assertEqual(body["cv"]["marital"], "")
+
+    def test_real_values_survive(self):
+        for v in ("Yapıldı (2021)", "B, CE", "1998", "C1", "AWS", "SQL", "İzmir", "Ar-Ge", "e-ticaret", "Go",
+                  "Tecilli (Haziran 2027'ye kadar)", "IELTS 6.5 (2024)", "A.Ş.", "C#", ".NET", "UX/UI"):
+            self.assertEqual(schema.drop_placeholder(v), v)
+
+
 class SchemaV2Tests(unittest.TestCase):
     def test_langs_cefr_and_exam(self):
         cv = schema.normalize_cv({"langs": [

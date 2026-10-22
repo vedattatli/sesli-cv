@@ -562,6 +562,7 @@ def shape_response(op, data, meta=None, req=None):
         if meta is not None and checked:
             meta["ev_checked"], meta["ev_dropped"] = checked, dropped
     out = {"cv": schema.normalize_cv(data["cv"])}
+    out["cv"]["marital"] = ""  # only the app's Kişisel bilgiler card sets it, never the model
     if op == "extract":
         out["heard"] = schema.clean_str(data.get("heard"), 600) or DEFAULT_HEARD
         out["missing"] = schema.str_list(data.get("missing"), schema.MAX_MISSING,

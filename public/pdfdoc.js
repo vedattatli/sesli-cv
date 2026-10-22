@@ -400,8 +400,20 @@
   function arr(v) { return Array.isArray(v) ? v : []; }
 
   // Yaprak değerler string olmalı; sayılar kabul edilir, geri kalan her şey '' sayılır.
+  // Roboto in pdfmake's vfs has no arrows, check marks, stars, geometric shapes or emoji: they would
+  // print as empty boxes. Arrows become a dash, shapes a bullet, the rest is dropped.
+  var GLYPH_RE = /[\u2012\u2190-\u21FF\u2300-\u23FF\u2500-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u2117]|[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
+  function glyphSafe(s) {
+    return s.replace(GLYPH_RE, function (c) {
+      var n = c.length === 1 ? c.charCodeAt(0) : 0;
+      if (n === 0x2012 || (n >= 0x2190 && n <= 0x21FF) || (n >= 0x2794 && n <= 0x27BF) || n === 0x25BA || n === 0x25B6) return '–';
+      if (n === 0x2117) return '(P)';
+      if (n >= 0x25A0 && n <= 0x25FF || n === 0x2023 || n === 0x2666) return '•';
+      return '';
+    });
+  }
   function str(v) {
-    if (typeof v === 'string') return v;
+    if (typeof v === 'string') return glyphSafe(v);
     if (typeof v === 'number' && isFinite(v)) return String(v);
     return '';
   }
@@ -1001,6 +1013,11 @@
 
     var certs = cleanItems(p.splitLines(str(cv.certs)));
     if (o.profile === 'saha') certs = licencesFirst(certs);
+    // The driving licence printed once: when a certificate line already names it ("B Sınıfı Sürücü
+    // Belgesi"), the Kişisel Bilgiler row is dropped.
+    if (certs.some(function (c) { return /s[üu]r[üu]c[üu] belge|ehliyet|driv(ing|er'?s) licen[cs]e/i.test(c); })) {
+      personal = personal.filter(function (x) { return x.label !== L.license; });
+    }
 
     var groups = skillGroups(cv.skills);
 

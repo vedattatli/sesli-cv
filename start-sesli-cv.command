@@ -107,6 +107,25 @@ say "  ✅ Sesli CV açık. Bu linki arkadaşınıza gönderin (panoya kopyaland
 say ""
 say "     $LINK"
 say ""
+# QR code for opening the link on a phone (black on white, whatever the Terminal theme).
+if ./.venv/bin/python -c 'import qrcode' >/dev/null 2>&1 || ./.venv/bin/python -m pip install -q qrcode >/dev/null 2>&1; then
+  say "  Kendi telefonunuzda denemek için kamerayla okutun:"
+  say ""
+  ./.venv/bin/python - "$LINK" <<'PY' 2>/dev/null
+import sys, qrcode
+q = qrcode.QRCode(border=2, error_correction=qrcode.constants.ERROR_CORRECT_L)
+q.add_data(sys.argv[1]); q.make(fit=True)
+m = q.get_matrix()
+if len(m) % 2:
+    m.append([False] * len(m[0]))
+BLACK, WHITE = 16, 231
+for y in range(0, len(m), 2):
+    row = "".join("\033[38;5;%dm\033[48;5;%dm▀" % (BLACK if top else WHITE, BLACK if bottom else WHITE)
+                  for top, bottom in zip(m[y], m[y + 1]))
+    print("     " + row + "\033[0m")
+PY
+  say ""
+fi
 say "  • Bu pencere açık ve bilgisayar internete bağlı kaldıkça çalışır."
 say "    Dizüstüyse kapağı kapatmayın; ekran kararabilir ama uyku moduna geçmez."
 say "  • Link her açılışta değişir; yeniden açtığınızda yeni linki gönderin."

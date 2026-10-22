@@ -538,6 +538,33 @@
     });
   })();
 
+  // Sürücü belgesi bir kez basılır: sertifikalarda geçiyorsa Kişisel Bilgiler satırı düşer.
+  (function () {
+    var base = { name: 'Kerem Demir', title: 'Backend Geliştirici', license: 'B', military: 'Yapıldı (2015)' };
+    var withCert = Object.assign({}, base, { certs: 'AWS Certified Developer – Associate, 2024\nB Sınıfı Sürücü Belgesi' });
+    ['klasik', 'sade', 'modern'].forEach(function (t) {
+      var txt = JSON.stringify(CVPdf.build(withCert, { template: t }).content);
+      eq((txt.match(/Sürücü Belgesi/g) || []).length, 1, t + ': sertifikada geçen ehliyet kişisel bilgilerde tekrar edilmez');
+      ok(/Yapıldı \(2015\)/.test(txt), t + ': diğer kişisel bilgiler kalır');
+      var only = JSON.stringify(CVPdf.build(base, { template: t }).content);
+      ok(/Sürücü Belgesi/.test(only) && /"B"|B\b/.test(only), t + ': sertifikada yoksa kişisel bilgilerde basılır');
+    });
+  })();
+
+  // Roboto'da olmayan karakterler PDF'e kutu olarak düşmez.
+  (function () {
+    var cv = { name: 'Kerem Demir', title: 'Backend ★ Geliştirici', summary: 'Hızlı ✓ sonuç 🚀 odaklı.',
+      jobs: [{ role: 'Stajyer → Junior Yazılım Mühendisi', company: 'HAVELSAN', start: '2020', end: '2022',
+               desc: '► Test kapsamını ‒ artırdım ✔\n● Raporları ⇒ hazırladım' }],
+      skills: 'Go ➔ Kafka, ■ Docker', certs: 'AWS ☆ Developer' };
+    ['klasik', 'sade', 'modern'].forEach(function (t) {
+      var txt = JSON.stringify(CVPdf.build(cv, { template: t }).content);
+      ok(!/[\u2012\u2190-\u21FF\u2500-\u27BF\u2605\u2606]|\\ud83d/i.test(txt), t + ': desteklenmeyen glif kalmaz');
+      ok(txt.indexOf('Stajyer – Junior Yazılım Mühendisi') >= 0, t + ': ok işareti tireye döner');
+      ok(txt.indexOf('Hızlı  sonuç  odaklı.') < 0 && txt.indexOf('Hızlı sonuç odaklı.') >= 0, t + ': atılan işaretler fazla boşluk bırakmaz');
+    });
+  })();
+
   print('pdfdoc-v2: ' + passed + ' passed, ' + failed + ' failed');
   if (failed) throw new Error(failed + ' test başarısız');
 })();

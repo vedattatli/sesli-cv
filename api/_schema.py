@@ -142,6 +142,21 @@ def clean_str(value, limit=MAX_STR):
     return scrub(value.strip()[:limit].strip())
 
 
+# Model output sometimes fills a required string with a stand-in instead of "" (seen live:
+# "MISSING_PLACEHOLDER_FIX" in marital). None of these can be real CV content.
+_PLACEHOLDER = re.compile(
+    r"^\[[^\]]*\]$"                         # [X], [Şirket Adı]
+    r"|^[A-Z0-9]+(?:_[A-Z0-9]+)+$"            # NOT_PROVIDED, MISSING_PLACEHOLDER_FIX
+    r"|placeholder"
+    r"|^(?:n/?a|null|none|undefined|tbd|x{2,4}|\.\.\.|…|-|—|–)$",
+    re.I,
+)
+
+
+def drop_placeholder(text):
+    return "" if text and _PLACEHOLDER.search(text) else text
+
+
 def clean_link(value):
     s = clean_str(value)
     s = _LINK_PREFIX.sub("", s)
@@ -158,7 +173,7 @@ def str_list(value, cap, limit=MAX_STR, dedupe=False):
     out, seen = [], set()
     for item in value:
         s = clean_str(item, limit)
-        s = _BULLET_MARK.sub("", s).strip()
+        s = drop_placeholder(_BULLET_MARK.sub("", s).strip())
         if not s:
             continue
         if dedupe:
@@ -208,7 +223,7 @@ def _entries(value, cap, keys, has_bullets, link_key=None):
     for item in value:
         if not isinstance(item, dict):
             continue
-        entry = {k: clean_str(item.get(k)) for k in keys}
+        entry = {k: drop_placeholder(clean_str(item.get(k))) for k in keys}
         if link_key:
             entry[link_key] = clean_link(item.get(link_key))
         if has_bullets:
@@ -241,7 +256,8 @@ def normalize_cv(value):
     if not isinstance(value, dict):
         return cv
     for key in SCALAR_KEYS:
-        cv[key] = clean_link(value.get(key)) if key in LINK_KEYS else clean_str(value.get(key))
+        raw = clean_link(value.get(key)) if key in LINK_KEYS else clean_str(value.get(key))
+        cv[key] = drop_placeholder(raw)
     cv["jobs"] = _entries(value.get("jobs"), CAPS["jobs"], JOB_KEYS, True)
     cv["edu"] = _entries(value.get("edu"), CAPS["edu"], EDU_KEYS, False)
     cv["projects"] = _entries(value.get("projects"), CAPS["projects"], ("name", "tech"), True,

@@ -92,8 +92,9 @@ TURKISH CONVENTIONS AND FORMATTING
 - Dates: Turkish month + year ("Mart 2019"), the year alone if no month was said, ongoing → end "Devam ediyor".
   Never guess a month. jobs, edu and projects newest first.
 - Jobs: role, company, city, dates. When the person said so, add the type to the role in parentheses: "(Staj)",
-  "(Yarı zamanlı)", "(Gönüllü)", "(Serbest)". A promotion within one company stays one entry and the role shows the
-  path ("Stajyer → Junior Yazılım Mühendisi"). role is a title, never a sentence.
+  "(Yarı zamanlı)", "(Gönüllü)", "(Serbest)". A promotion within one company stays one entry: role is the latest
+  title and one bullet records the path ("Stajyer olarak başladım; Şubat 2021'de Junior Yazılım Mühendisi oldum.").
+  role is a title, never a sentence. No arrows, emoji or symbols in any field.
 - Education: high school only when there is no higher degree (or the person insists). degree: "Lisans", "Yüksek
   Lisans", "Ön Lisans", "Lise", "Doktora". note: GNO exactly as said with its scale ("GNO 3,52 / 4,00"; never
   convert scales), "Beklenen mezuniyet" (the date itself goes in end), Erasmus, Çift Anadal, Yandal, burs, onur;
@@ -104,7 +105,8 @@ TURKISH CONVENTIONS AND FORMATTING
   language; keep it with a level when it was learned.
 - certs: one item per certificate, licence document, course or award, with issuer and year if said ("Forklift
   Operatör Belgesi – MEB onaylı kurs, 2022"; awards as "Ödül: …"). license: driving licence classes only ("B",
-  "B, CE").
+  "B, CE"); for profile saha also list it first in certs as "B Sınıfı Sürücü Belgesi", otherwise never repeat it
+  in certs.
 - Phone: "0532 123 45 67" (or "+90 532 123 45 67" if they said +90). E-mail: lowercase ASCII; spoken symbols
   converted (et/at → @, nokta → ., alt çizgi → _, tire → -); Turkish letters folded (ş→s, ı→i, ğ→g, ü→u, ö→o,
   ç→c). web, github and project links: no "https://", no "www." ("linkedin.com/in/aysekaya", "github.com/aysekaya").

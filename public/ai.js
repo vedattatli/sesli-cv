@@ -803,7 +803,9 @@
       skills: skillsFromAI(x),
       langs: langsFromAI(x.langs, lang),
       certs: lines(x.certs), hobbies: strList(x.hobbies).join(', '), refs: kept('refs', lines(x.refs)),
-      birth: kept('birth', s(x.birth)), military: kept('military', s(x.military)), license: s(x.license), marital: kept('marital', s(x.marital)),
+      birth: kept('birth', s(x.birth)), military: kept('military', s(x.military)), license: s(x.license),
+      // Medeni durum yalnızca Kişisel bilgiler kartından gelir; yapay zekânın değeri hiç alınmaz.
+      marital: typeof p.marital === 'string' ? p.marital : '',
     };
   }
 
