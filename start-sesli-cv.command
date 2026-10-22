@@ -79,11 +79,27 @@ LINK="$URL/"
 [ -n "$ACCESS_CODE" ] && LINK="$URL/#k=$ACCESS_CODE"
 printf '%s' "$LINK" | pbcopy
 
-say "  Bağlantı kontrol ediliyor…"
+# Wait until the tunnel is registered at Cloudflare, then give the new hostname a few seconds to
+# reach DNS. Deliberately no lookup from this Mac before that: an early "not found" is cached by
+# macOS for about a minute, and the link would then fail here while it works everywhere else.
+say "  Bağlantı hazırlanıyor…"
 for _ in $(seq 1 60); do
-  [ "$(curl -s -o /dev/null -w '%{http_code}' "$URL/")" = "200" ] && break
-  sleep 1
+  grep -q 'Registered tunnel connection' "$LOGDIR/tunnel.log" && break
+  kill -0 "$TUN" 2>/dev/null || fail "Tünel kapandı. İnternet bağlantınızı kontrol edip tekrar deneyin. Ayrıntı: .logs/tunnel.log"
+  sleep 0.5
 done
+# End-to-end check through a Cloudflare edge address (trycloudflare.com itself is in DNS), so the
+# new hostname is never looked up from this Mac before it exists.
+HOST="${URL#https://}"
+EDGE="$(./.venv/bin/python -c 'import socket; print(socket.gethostbyname("trycloudflare.com"))' 2>/dev/null)"
+READY=""
+if [ -n "$EDGE" ]; then
+  for _ in $(seq 1 30); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve "$HOST:443:$EDGE" "$URL/")" = "200" ] && READY=1 && break
+    sleep 1
+  done
+fi
+sleep 10  # time for the new name to appear in DNS before the link is shared
 
 clear
 say ""
@@ -94,6 +110,8 @@ say ""
 say "  • Bu pencere açık ve bilgisayar internete bağlı kaldıkça çalışır."
 say "    Dizüstüyse kapağı kapatmayın; ekran kararabilir ama uyku moduna geçmez."
 say "  • Link her açılışta değişir; yeniden açtığınızda yeni linki gönderin."
+say "  • Link bu bilgisayarda hemen açılmazsa bir dakika sonra yeniden deneyin; telefonda bu sorun olmaz."
+[ -n "$READY" ] || say "  • Uyarı: bağlantı henüz doğrulanamadı; bir sorun olursa pencereyi kapatıp yeniden başlatın."
 say "  • Kapatmak için bu pencereyi kapatın ya da Ctrl+C'ye basın."
 say ""
 say "  Gelen istekler:"

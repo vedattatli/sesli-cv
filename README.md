@@ -34,6 +34,23 @@ Konuşarak CV hazırlayan web uygulaması. Kişi birkaç geniş soruyu kendi cü
 | `api/_prompts.py`, `api/_schema.py` | Yazım kuralları (sistem istemi) ve yapılandırılmış çıktı şemaları |
 | `dev_server.py` | Yerel geliştirme sunucusu (`CV_MOCK=1` ile yapay zekâsız deneme modu) |
 
+## Bu bilgisayardan yayın (Vercel'siz)
+
+`start-sesli-cv.command` dosyasına çift tıklayın. Başlatıcı şunları yapar:
+
+- yerel sunucuyu (`dev_server.py`, gerçek Claude) ve hesapsız bir Cloudflare tünelini açar;
+- Mac'i uyanık tutar;
+- `https://…trycloudflare.com/#k=DAVETKODU` biçimindeki linki gösterir ve panoya kopyalar;
+- gelen istekleri içeriklerini yazmadan listeler.
+
+Pencere kapanınca her şey durur.
+
+Gerekenler:
+- `brew install cloudflared`
+- `.env.local` dosyasında `ANTHROPIC_API_KEY` ve isteğe bağlı `ACCESS_CODE` satırları
+
+Python ortamı (`.venv`) yoksa başlatıcı ilk açılışta kendisi kurar. Link her açılışta değişir ve yalnızca bilgisayar açıkken çalışır.
+
 ## Vercel'e kurulum
 
 1. https://vercel.com/new adresinde bu depoyu içe aktarın. Framework olarak "Other" seçin; ayarlar `vercel.json`'dan okunur.
