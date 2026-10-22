@@ -707,6 +707,13 @@ class RateLimitTests(Base):
         self.assertEqual(api.client_ip({}, "3.3.3.3"), "3.3.3.3")
         self.assertEqual(api.client_ip({}), "unknown")
 
+    def test_cloudflare_ip_only_when_trusted(self):
+        h = {"X-Forwarded-For": "6.6.6.6, 1.2.3.4", "CF-Connecting-IP": "1.2.3.4"}
+        self.assertEqual(api.client_ip(h), "6.6.6.6")  # untrusted (e.g. Vercel): header ignored
+        with mock.patch.dict(os.environ, {"CV_TRUST_CF": "1"}):
+            self.assertEqual(api.client_ip(h), "1.2.3.4")
+            self.assertEqual(api.client_ip({"X-Forwarded-For": "6.6.6.6"}), "6.6.6.6")
+
 
 # ---------------------------------------------------------------- HTTP layer / CORS / sizes
 

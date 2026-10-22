@@ -170,6 +170,11 @@ def lower_headers(headers):
 
 def client_ip(headers, fallback=""):
     h = lower_headers(headers)
+    # Behind a Cloudflare tunnel (start-sesli-cv.command) the edge sets CF-Connecting-IP and a client
+    # can prepend fake X-Forwarded-For hops. Trust the header only when the launcher says so: on
+    # Vercel anyone could send it.
+    if os.environ.get("CV_TRUST_CF") == "1" and h.get("cf-connecting-ip", "").strip():
+        return h["cf-connecting-ip"].strip()
     xff = h.get("x-forwarded-for", "")
     first = xff.split(",")[0].strip() if xff else ""
     return first or h.get("x-real-ip", "").strip() or fallback or "unknown"

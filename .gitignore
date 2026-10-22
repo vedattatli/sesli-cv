@@ -11,3 +11,4 @@ public/fake-sr.js
 public/sample-cv.json
 .DS_Store
 public/fake-ai.js
+.logs/
